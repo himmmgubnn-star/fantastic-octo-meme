@@ -73,6 +73,17 @@ function needsSpaceBetween(left, right) {
  * @param {Token[]} tokens
  * @returns {Set<string>}
  */
+/**
+ * Remove comment tokens while preserving all executable tokens.
+ * Needed before any pass that re-inlines source onto single lines.
+ * @param {string} source
+ * @returns {string}
+ */
+function stripCommentTokens(source) {
+  const tokens = tokenize(source).filter((t) => t.type !== 'comment');
+  return tokensToSource(tokens);
+}
+
 function collectLocalNames(tokens) {
   /** @type {Set<string>} */
   const locals = new Set();
@@ -579,10 +590,15 @@ function injectOpaquePredicates(source, random, options = {}) {
   for (let n = 0; n < injections; n += 1) {
     let lineIdx = random.int(0, lines.length - 1);
     let guard = 0;
-    while (usedLines.has(lineIdx) && guard < 10) {
+    while (
+      (usedLines.has(lineIdx) ||
+        /^(?:\s*)(else|elseif|end|until)\b/.test(lines[lineIdx] || '')) &&
+      guard < 10
+    ) {
       lineIdx = random.int(0, lines.length - 1);
       guard += 1;
     }
+    if (/^(?:\s*)(else|elseif|end|until)\b/.test(lines[lineIdx] || '')) continue;
     usedLines.add(lineIdx);
 
     const a = random.int(1, 20);
@@ -614,6 +630,9 @@ function injectOpaquePredicates(source, random, options = {}) {
  * @param {Random} random
  */
 function flattenControlFlow(source, random) {
+  // Strip comments first: inlining a `--` comment mid-line would swallow
+  // the rest of the generated dispatcher.
+  source = stripCommentTokens(source);
   // Split into top-level statements using a lightweight block-depth scan
   const statements = splitTopLevelStatements(source);
   if (statements.length < 3 || statements.length > 40) {
@@ -623,6 +642,10 @@ function flattenControlFlow(source, random) {
   // Reject if any statement still has unbalanced block keywords (nested chunks)
   for (const stmt of statements) {
     if (blockDepthDelta(stmt) !== 0) return source;
+    // `return` must terminate a block; inlining it mid-dispatcher is invalid Lua
+    if (tokenize(stmt).some((t) => t.type === 'keyword' && t.value === 'return')) {
+      return source;
+    }
   }
 
   const stateName = random.ident(7);
@@ -946,7 +969,7 @@ function injectJunkLocals(source, random, options = {}) {
     if (form === 0) junk.push(`local ${name}=${random.int(0, 9999)}`);
     else if (form === 1) junk.push(`local ${name}=${luaStringLiteral(random.hexName(3))}`);
     else if (form === 2) junk.push(`local ${name}={}`);
-    else junk.push(`local ${name}=function()return ${random.int(0, 9)}end`);
+    else junk.push(`local ${name}=function()return ${random.int(0, 9)} end`);
   }
   return `${junk.join(';')};${source}`;
 }
@@ -958,6 +981,7 @@ function injectJunkLocals(source, random, options = {}) {
  * @param {Random} random
  */
 function vmEncodePrologue(source, random) {
+  source = stripCommentTokens(source);
   const statements = splitTopLevelStatements(source);
   if (statements.length < 4 || statements.length > 12) return source;
 

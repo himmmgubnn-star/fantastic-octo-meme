@@ -11,7 +11,7 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "register-commands": "node src/bot/registerCommands.js",
-    "test": "node --test tests/",
+    "test": "node --test",
     "lint": "node --check src/index.js && node --check src/obfuscator/index.js && node --check src/bot/commands.js"
   },
   "keywords": [
@@ -26,5 +26,8 @@
   "dependencies": {
     "discord.js": "^14.16.3",
     "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "luaparse": "^0.3.1"
   }
 }
