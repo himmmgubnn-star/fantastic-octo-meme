@@ -14,11 +14,14 @@ const {
   wrapFunctionProxies,
   injectJunkLocals,
   vmEncodePrologue,
+  obfuscateBooleans,
+  injectDeadCode,
+  wrapClosure,
 } = require('./passes');
 const { scanSource } = require('./securityScan');
 const { analyzeSource } = require('./analyze');
 
-/** @typedef {'light' | 'standard' | 'heavy'} ObfuscationLevel */
+/** @typedef {'light' | 'standard' | 'heavy' | 'maximum'} ObfuscationLevel */
 
 /**
  * @typedef {object} ObfuscateOptions
@@ -36,6 +39,9 @@ const { analyzeSource } = require('./analyze');
  * @property {boolean} [junk]
  * @property {boolean} [vm]
  * @property {boolean} [antiTamper]
+ * @property {boolean} [booleans]
+ * @property {boolean} [deadCode]
+ * @property {boolean} [closure]
  * @property {string} [watermark]
  * @property {number} [maxOutputBytes]
  */
@@ -71,6 +77,9 @@ const LEVEL_PRESETS = Object.freeze({
     junk: false,
     vm: false,
     antiTamper: false,
+    booleans: false,
+    deadCode: false,
+    closure: false,
   },
   standard: {
     minify: true,
@@ -85,6 +94,9 @@ const LEVEL_PRESETS = Object.freeze({
     junk: true,
     vm: false,
     antiTamper: true,
+    booleans: true,
+    deadCode: true,
+    closure: false,
   },
   heavy: {
     minify: true,
@@ -99,6 +111,26 @@ const LEVEL_PRESETS = Object.freeze({
     junk: true,
     vm: true,
     antiTamper: true,
+    booleans: true,
+    deadCode: true,
+    closure: false,
+  },
+  maximum: {
+    minify: true,
+    rename: true,
+    strings: true,
+    numbers: true,
+    controlFlow: true,
+    opaquePredicates: true,
+    bootstrap: true,
+    splitStrings: true,
+    proxies: true,
+    junk: true,
+    vm: true,
+    antiTamper: true,
+    booleans: true,
+    deadCode: true,
+    closure: true,
   },
 });
 
@@ -164,7 +196,11 @@ function obfuscate(input, options = {}) {
     junk: options.junk ?? preset.junk,
     vm: options.vm ?? preset.vm,
     antiTamper: options.antiTamper ?? preset.antiTamper,
+    booleans: options.booleans ?? preset.booleans,
+    deadCode: options.deadCode ?? preset.deadCode,
+    closure: options.closure ?? preset.closure,
   };
+  const isMaximum = level === 'maximum';
 
   const watermark =
     typeof options.watermark === 'string' && options.watermark.trim()
@@ -203,20 +239,26 @@ function obfuscate(input, options = {}) {
   // 3. Opaque predicates
   if (flags.opaquePredicates) {
     code = injectOpaquePredicates(code, random, {
-      maxInject: level === 'heavy' ? 10 : 5,
+      maxInject: isMaximum ? 16 : level === 'heavy' ? 10 : 5,
     });
     passes.push('opaque-predicates');
   }
 
   // 4. Junk locals
   if (flags.junk) {
-    code = injectJunkLocals(code, random, { count: level === 'heavy' ? 5 : 3 });
+    code = injectJunkLocals(code, random, { count: isMaximum ? 6 : level === 'heavy' ? 5 : 3 });
     passes.push('junk-locals');
+  }
+
+  // 4b. Dead code blocks (unreachable branches)
+  if (flags.deadCode) {
+    code = injectDeadCode(code, random, { count: isMaximum ? 5 : 2 });
+    passes.push('dead-code');
   }
 
   // 5. Function proxies
   if (flags.proxies) {
-    code = wrapFunctionProxies(code, random, { density: level === 'heavy' ? 0.6 : 0.4 });
+    code = wrapFunctionProxies(code, random, { density: isMaximum ? 0.75 : level === 'heavy' ? 0.6 : 0.4 });
     passes.push('function-proxies');
   }
 
@@ -230,13 +272,19 @@ function obfuscate(input, options = {}) {
 
   // 7. Number opacity
   if (flags.numbers) {
-    code = opaqueNumbers(code, random, { density: level === 'heavy' ? 0.75 : 0.5 });
+    code = opaqueNumbers(code, random, { density: isMaximum ? 0.9 : level === 'heavy' ? 0.75 : 0.5 });
     passes.push('opaque-numbers');
+  }
+
+  // 7b. Boolean opacity
+  if (flags.booleans) {
+    code = obfuscateBooleans(code, random, { density: isMaximum ? 1 : 0.8 });
+    passes.push('boolean-obfuscation');
   }
 
   // 8. String splitting (before encryption)
   if (flags.splitStrings) {
-    code = splitStrings(code, random, { density: 0.65 });
+    code = splitStrings(code, random, { density: isMaximum ? 0.8 : 0.65 });
     passes.push('string-split');
   }
 
@@ -250,6 +298,13 @@ function obfuscate(input, options = {}) {
   if (flags.minify) {
     code = stripCommentsAndMinify(code);
     passes.push('minify');
+  }
+
+  // 10b. Closure wrapping — hides top-level scope; runs after minify so the
+  // wrapped body has no trailing comments.
+  if (flags.closure) {
+    code = wrapClosure(code, random);
+    passes.push('closure-wrap');
   }
 
   // 11. Bootstrap

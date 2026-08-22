@@ -27,6 +27,7 @@ function buildCommands() {
             { name: 'light', value: 'light' },
             { name: 'standard', value: 'standard' },
             { name: 'heavy', value: 'heavy' },
+            { name: 'maximum', value: 'maximum' },
           ],
         },
         {
@@ -34,6 +35,12 @@ function buildCommands() {
           description: 'Ownership tag embedded as a header comment',
           type: 3,
           max_length: 48,
+        },
+        {
+          name: 'seed',
+          description: 'Deterministic seed — same seed + source = identical output',
+          type: 3,
+          max_length: 64,
         },
         {
           name: 'ephemeral',

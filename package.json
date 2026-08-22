@@ -1,6 +1,6 @@
 {
   "name": "discord-lua-obfuscator",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Production Discord bot that obfuscates Luau/Lua for Roblox module protection",
   "main": "src/index.js",
   "type": "commonjs",

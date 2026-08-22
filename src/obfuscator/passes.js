@@ -537,7 +537,7 @@ function opaqueNumbers(source, random, options = {}) {
 
     const a = random.int(2, 40);
     const b = random.int(2, 40);
-    const form = random.int(0, 3);
+    const form = random.int(0, 5);
 
     let expr;
     switch (form) {
@@ -556,11 +556,21 @@ function opaqueNumbers(source, random, options = {}) {
         expr = `bit32.bxor(bit32.bxor(${n},${a}),${a})`;
         break;
       }
-      default: {
+      case 3: {
         // n = q*b + r
         const q = Math.trunc(n / b);
         const r = n - q * b;
         expr = `((${q})*${b}+${r})`;
+        break;
+      }
+      case 4: {
+        // (n * a) / a — exact in doubles while n*a < 2^53
+        expr = `((${n * a})/${a})`;
+        break;
+      }
+      default: {
+        // math.floor(n / b) * b + n % b == n
+        expr = `((math.floor(${n}/${b}))*${b}+(${n}%${b}))`;
         break;
       }
     }
@@ -1044,6 +1054,105 @@ function vmEncodePrologue(source, random) {
   return rest ? `${vm};${rest}` : vm;
 }
 
+/**
+ * Replace `true` / `false` literal keywords with opaque constant expressions
+ * that evaluate to the same value. Safe everywhere: reserved words can never
+ * appear as table field names, so keyword positions are always expressions.
+ * @param {string} source
+ * @param {Random} random
+ * @param {{ density?: number }} [options]
+ */
+function obfuscateBooleans(source, random, options = {}) {
+  const density = options.density ?? 0.8;
+  const tokens = tokenize(source);
+
+  const TRUE_FORMS = [
+    '((1)~=(2))',
+    '((2)>(1))',
+    'not((1)==(2))',
+    'not((2)<(1))',
+    '(((3)%2)==1)',
+  ];
+  const FALSE_FORMS = [
+    '((1)==(2))',
+    'not((2)>(1))',
+    '((2)<(1))',
+    'not((1)~=(2))',
+    '(((3)%2)==2)',
+  ];
+
+  for (const token of tokens) {
+    if (token.type !== 'keyword') continue;
+    if (token.value !== 'true' && token.value !== 'false') continue;
+    if (random.next() > density) continue;
+    token.type = 'symbol';
+    token.value = random.pick(token.value === 'true' ? TRUE_FORMS : FALSE_FORMS);
+  }
+
+  return tokensToSource(tokens);
+}
+
+/**
+ * Inject syntactically valid but unreachable code blocks (guarded by a
+ * statically-false predicate). Noise for decompilers and human readers.
+ * @param {string} source
+ * @param {Random} random
+ * @param {{ count?: number }} [options]
+ */
+function injectDeadCode(source, random, options = {}) {
+  const count = options.count ?? random.int(2, 4);
+
+  /** @returns {string} a few junk statements valid in any block */
+  const junkStatements = () => {
+    const stmts = [];
+    const n = random.int(1, 3);
+    for (let i = 0; i < n; i += 1) {
+      const name = random.ident(random.int(5, 8));
+      switch (random.int(0, 4)) {
+        case 0:
+          stmts.push(`local ${name}=${random.int(0, 999)}`);
+          break;
+        case 1:
+          stmts.push(`local ${name}=${luaStringLiteral(random.hexName(4))}`);
+          break;
+        case 2:
+          stmts.push(`for ${random.ident(3)}=${random.int(1, 5)},${random.int(0, 3)} do end`);
+          break;
+        case 3:
+          stmts.push(`local ${name}={${random.int(0, 99)},${luaStringLiteral(random.hexName(2))}}`);
+          break;
+        default:
+          stmts.push(`do local ${name}=(${random.int(1, 50)})*(${random.int(1, 50)}) end`);
+          break;
+      }
+    }
+    return stmts.join(';');
+  };
+
+  /** @type {string[]} */
+  const blocks = [];
+  for (let i = 0; i < count; i += 1) {
+    const condA = random.int(2, 90);
+    blocks.push(
+      `if ${condA}>${condA + random.int(1, 50)} then ${junkStatements()} end`,
+    );
+  }
+
+  return `${blocks.join(';')};${source}`;
+}
+
+/**
+ * Wrap the entire chunk in an immediately-invoked vararg closure so static
+ * analyzers see no top-level scope. Preserves chunk varargs (`...`) and
+ * return values.
+ * @param {string} source
+ * @param {Random} random
+ */
+function wrapClosure(source, _random) {
+  void _random;
+  return `(function(...)\n${source}\nend)(...)`;
+}
+
 module.exports = {
   stripCommentsAndMinify,
   renameLocals,
@@ -1056,6 +1165,9 @@ module.exports = {
   wrapFunctionProxies,
   injectJunkLocals,
   vmEncodePrologue,
+  obfuscateBooleans,
+  injectDeadCode,
+  wrapClosure,
   // exported for tests
   collectLocalNames,
   decodeLuaStringToken,

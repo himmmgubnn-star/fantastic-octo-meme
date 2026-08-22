@@ -153,8 +153,9 @@ function helpEmbed() {
         name: 'Levels',
         value:
           '**light** — rename + minify + bootstrap\n' +
-          '**standard** — + string encryption/splitting, opaque numbers/predicates, junk, proxies, anti-tamper\n' +
-          '**heavy** — + control-flow flattening, VM prologue',
+          '**standard** — + string encryption/splitting, opaque numbers/booleans/predicates, dead code, junk, proxies, anti-tamper\n' +
+          '**heavy** — + control-flow flattening, VM prologue\n' +
+          '**maximum** — + closure wrapping, maximum pass densities',
       },
     );
 }

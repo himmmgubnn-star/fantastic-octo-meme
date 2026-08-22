@@ -31,7 +31,7 @@ class StatsStore {
       totalScans: 0,
       totalBytesIn: 0,
       totalBytesOut: 0,
-      byLevel: { light: 0, standard: 0, heavy: 0 },
+      byLevel: { light: 0, standard: 0, heavy: 0, maximum: 0 },
       byUser: {},
       failures: 0,
       lastUsedAt: null,

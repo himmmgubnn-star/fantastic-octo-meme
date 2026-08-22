@@ -32,12 +32,34 @@ function assertParses(code, label) {
 }
 
 test('all levels produce parseable Lua', () => {
-  for (const level of ['light', 'standard', 'heavy']) {
+  for (const level of ['light', 'standard', 'heavy', 'maximum']) {
     const { code } = obfuscate(SAMPLE, { level, seed: 42 });
     assert.ok(code.length > 0, `${level} produced empty output`);
     assertParses(code, level);
   }
 });
+
+test('maximum enables closure wrapping, dead code, boolean obfuscation', () => {
+  const { code, meta } = obfuscate(SAMPLE, {
+    level: 'maximum',
+    seed: 42,
+    watermark: 'Max',
+  });
+  assert.ok(meta.passes.includes('closure-wrap'), 'missing closure-wrap pass');
+  assert.ok(meta.passes.includes('dead-code'), 'missing dead-code pass');
+  assert.ok(meta.passes.includes('boolean-obfuscation'), 'missing boolean-obfuscation pass');
+  assert.match(code, /\(function\(\.\.\.\)/);
+});
+
+test('boolean obfuscation replaces literals with equivalent expressions', () => {
+  const { Random } = require('../src/obfuscator/random');
+  const passes = require('../src/obfuscator/passes');
+  const src = 'local a = true local b = false return a or b';
+  const out = passes.obfuscateBooleans(src, new Random(5), { density: 1 });
+  assertParses(out, 'boolean-obfuscation');
+  assert.ok(!/\b(true|false)\b/.test(out), 'boolean literals still present');
+});
+
 
 test('output differs across seeds', () => {
   const a = obfuscate(SAMPLE, { level: 'standard', seed: 1 }).code;

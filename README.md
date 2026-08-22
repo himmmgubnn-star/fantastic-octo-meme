@@ -4,13 +4,24 @@ Production Discord bot that obfuscates **Lua / Luau** for **Roblox ModuleScript*
 
 > **Important:** Obfuscation raises the cost of casual cracking. It is **not** cryptographic security. Never put secrets in client or shared modules.
 
-## What’s new in 1.1
+## What’s new in 1.2
+
+| Feature | Command / behavior |
+|---|---|
+| **New level** | `/obfuscate level:maximum` — everything on, maximum densities |
+| Boolean obfuscation | `true`/`false` → opaque equivalent expressions |
+| Dead-code injection | Unreachable guarded blocks with junk statement bodies |
+| Closure wrapping | Whole chunk wrapped in an IIFE vararg closure (`maximum`) |
+| More number forms | Multiplicative-inverse and `math.floor`/modulo encodings added |
+| Deterministic builds | `/obfuscate seed:` option — same seed + source = identical output |
+
+## What was new in 1.1
 
 | Feature | Command / behavior |
 |---|---|
 | Security scanner | `/scan` — secrets, webhooks, `loadstring`, exploit APIs, grade A–F |
 | Source analyzer | `/analyze` — metrics, Roblox APIs, recommendations |
-| Level compare | `/compare` — light + standard + heavy in one shot |
+| Level compare | `/compare` — light + standard + heavy + maximum in one shot |
 | Usage stats | `/stats` — totals, expansion ratio, uptime |
 | Help embed | `/help` |
 | Watermarks | `watermark:` option / `wm:Name` prefix flag |
@@ -24,17 +35,20 @@ Production Discord bot that obfuscates **Lua / Luau** for **Roblox ModuleScript*
 
 ### Obfuscation pipeline
 
-1. VM-lite prologue (`heavy`)
-2. Control-flow flattening (`heavy`)
+1. VM-lite prologue (`heavy`+)
+2. Control-flow flattening (`heavy`+)
 3. Opaque predicates
 4. Junk locals
-5. Function proxy wrappers
-6. Local / parameter renaming (Roblox globals preserved)
-7. Opaque numbers
-8. String splitting
-9. XOR string table encryption
-10. Minify / strip comments
-11. Bootstrap + optional anti-tamper + watermark
+5. Dead-code injection
+6. Function proxy wrappers
+7. Local / parameter renaming (Roblox globals preserved)
+8. Opaque numbers (add/sub, bxor, quotient, multiplicative, floor/modulo forms)
+9. Boolean opacity (`true`/`false` → constant expressions)
+10. String splitting
+11. XOR string table encryption
+12. Minify / strip comments
+13. Closure wrapping (`maximum`)
+14. Bootstrap + optional anti-tamper + watermark
 
 ### Discord UX
 
@@ -59,7 +73,7 @@ npm start
 ## Usage
 
 ```
-/obfuscate file:Module.lua level:standard watermark:MyGame ephemeral:true
+/obfuscate file:Module.lua level:maximum watermark:MyGame seed:build-42 ephemeral:true
 /scan file:Module.lua
 /analyze code:local x=1 return x
 /compare file:Module.lua
@@ -88,8 +102,9 @@ Or reply to any message that has code/file with:
 | Level | Extra beyond rename+minify |
 |---|---|
 | `light` | bootstrap |
-| `standard` | strings, split, numbers, junk, proxies, predicates, anti-tamper |
+| `standard` | strings, split, numbers, booleans, junk, dead code, proxies, predicates, anti-tamper |
 | `heavy` | + control-flow + VM prologue |
+| `maximum` | + closure wrapping, highest pass densities |
 
 ## Architecture
 

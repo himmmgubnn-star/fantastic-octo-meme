@@ -121,7 +121,7 @@ async function replyPayload(interaction, { embed, files, ephemeral }) {
 function buildRerunRow(source) {
   const sessionId = sessionCache.put({ source });
   const row = new ActionRowBuilder().addComponents(
-    ['light', 'standard', 'heavy'].map((level) =>
+    ['light', 'standard', 'heavy', 'maximum'].map((level) =>
       new ButtonBuilder()
         .setCustomId(`rerun:${sessionId}:${level}`)
         .setLabel(level[0].toUpperCase() + level.slice(1))
@@ -141,8 +141,13 @@ function obfuscatedDeliverables(result) {
   return { files: [new AttachmentBuilder(Buffer.from(code, 'utf8'), { name: filename })], content: null };
 }
 
-function runObfuscateForLevel(source, level, watermark) {
-  return obfuscate(source, { level, watermark: watermark || undefined, maxOutputBytes: config.maxOutputBytes });
+function runObfuscateForLevel(source, level, watermark, seed) {
+  return obfuscate(source, {
+    level,
+    watermark: watermark || undefined,
+    seed: seed || undefined,
+    maxOutputBytes: config.maxOutputBytes,
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -159,8 +164,9 @@ async function handleObfuscate(interaction) {
   });
   const level = opts.getString('level') || 'standard';
   const watermark = opts.getString('watermark');
+  const seed = opts.getString('seed');
 
-  const result = runObfuscateForLevel(code, level, watermark);
+  const result = runObfuscateForLevel(code, level, watermark, seed);
   stats.recordObfuscation({
     userId: interaction.user.id,
     level,
@@ -214,7 +220,7 @@ async function handleCompare(interaction) {
     code: interaction.options.getString('code'),
   });
 
-  const results = ['light', 'standard', 'heavy'].map((level) => {
+  const results = ['light', 'standard', 'heavy', 'maximum'].map((level) => {
     try {
       return { level, ok: true, result: runObfuscateForLevel(code, level) };
     } catch (err) {
@@ -366,7 +372,7 @@ async function handleMessage(message) {
   const flags = message.content.replace(/^!obfuscate/i, '').trim();
   const wmMatch = flags.match(/wm:(\S+)/i);
   const watermark = wmMatch ? wmMatch[1] : null;
-  const levelMatch = flags.match(/\b(light|standard|heavy)\b/i);
+  const levelMatch = flags.match(/\b(light|standard|heavy|maximum)\b/i);
   const level = levelMatch ? levelMatch[1].toLowerCase() : 'standard';
 
   let source = '';
