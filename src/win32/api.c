@@ -1,9 +1,9 @@
 /*
- * api.c — the Cellar Win32 export registry.
+ * api.c — the Airlock Win32 export registry.
  *
  * Modules (KERNEL32.dll, USER32.dll, ...) register here at startup. The PE
  * loader resolves each import thunk against this registry, so a Windows
- * binary binds to Cellar's native implementations.
+ * binary binds to Airlock's native implementations.
  *
  * SPDX-License-Identifier: MIT
  */
@@ -12,22 +12,22 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/win32.h"
 
 /* Registry = flat, growable array of module descriptors. */
-static const cellar_module_t **g_modules = NULL;
+static const airlock_module_t **g_modules = NULL;
 static size_t g_module_count = 0;
 static size_t g_module_cap = 0;
 
-void cellar_win32_register_module(const cellar_module_t *mod)
+void airlock_win32_register_module(const airlock_module_t *mod)
 {
     if (!mod || !mod->name || !mod->exports)
         return;
 
     if (g_module_count == g_module_cap) {
         size_t ncap = g_module_cap ? g_module_cap * 2 : 8;
-        const cellar_module_t **nm =
+        const airlock_module_t **nm =
             realloc(g_modules, ncap * sizeof *nm);
         if (!nm)
             return;
@@ -59,7 +59,7 @@ static int module_name_eq(const char *a, const char *b)
     return 1;
 }
 
-const cellar_module_t *cellar_win32_find_module(const char *name)
+const airlock_module_t *airlock_win32_find_module(const char *name)
 {
     size_t i;
     if (!name)
@@ -70,21 +70,21 @@ const cellar_module_t *cellar_win32_find_module(const char *name)
     return NULL;
 }
 
-size_t cellar_win32_module_count(void)
+size_t airlock_win32_module_count(void)
 {
     return g_module_count;
 }
 
-const cellar_module_t *cellar_win32_module_at(size_t i)
+const airlock_module_t *airlock_win32_module_at(size_t i)
 {
     if (i >= g_module_count)
         return NULL;
     return g_modules[i];
 }
 
-bool cellar_win32_export_exists(const char *module, const char *function)
+bool airlock_win32_export_exists(const char *module, const char *function)
 {
-    const cellar_module_t *m = cellar_win32_find_module(module);
+    const airlock_module_t *m = airlock_win32_find_module(module);
     size_t i;
     if (!m || !function)
         return false;
@@ -94,9 +94,9 @@ bool cellar_win32_export_exists(const char *module, const char *function)
     return false;
 }
 
-void *cellar_win32_lookup(const char *module, const char *function)
+void *airlock_win32_lookup(const char *module, const char *function)
 {
-    const cellar_module_t *m = cellar_win32_find_module(module);
+    const airlock_module_t *m = airlock_win32_find_module(module);
     size_t i;
     if (!m || !function)
         return NULL;
@@ -106,29 +106,29 @@ void *cellar_win32_lookup(const char *module, const char *function)
     return NULL;
 }
 
-void *cellar_win32_resolve(const char *module, const char *function,
+void *airlock_win32_resolve(const char *module, const char *function,
                            uint16_t ordinal)
 {
     void *p;
     (void)ordinal;
     if (function) {
-        p = cellar_win32_lookup(module, function);
+        p = airlock_win32_lookup(module, function);
         if (p)
             return p;
-        CELLAR_LOG_DEBUG("unresolved import: %s!%s", module, function);
+        AIRLOCK_LOG_DEBUG("unresolved import: %s!%s", module, function);
         return NULL;
     }
-    /* Ordinal-only import: Cellar does not yet support ordinal binding. */
-    CELLAR_LOG_DEBUG("unresolved ordinal import: %s!#%u", module, ordinal);
+    /* Ordinal-only import: Airlock does not yet support ordinal binding. */
+    AIRLOCK_LOG_DEBUG("unresolved ordinal import: %s!#%u", module, ordinal);
     return NULL;
 }
 
-void cellar_win32_dump_registry(void)
+void airlock_win32_dump_registry(void)
 {
     size_t i, j;
     printf("Registered Win32 modules (%zu):\n", g_module_count);
     for (i = 0; i < g_module_count; i++) {
-        const cellar_module_t *m = g_modules[i];
+        const airlock_module_t *m = g_modules[i];
         printf("  %-16s %zu exports\n", m->name, m->count);
         for (j = 0; j < m->count; j++)
             printf("    %s\n", m->exports[j].name);

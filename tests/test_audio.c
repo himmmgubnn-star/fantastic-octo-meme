@@ -12,8 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/audio.h"
+#include "airlock/airlock.h"
+#include "airlock/audio.h"
 
 static int g_failures = 0;
 #define CHECK(cond, msg) \
@@ -34,18 +34,18 @@ static uint32_t le32(const void *p)
 
 int main(void)
 {
-    const cellar_audio_backend_t *be = cellar_audio_default_backend();
-    cellar_audio_device_t dev;
-    cellar_audio_format_t fmt;
-    cellar_status_t st;
+    const airlock_audio_backend_t *be = airlock_audio_default_backend();
+    airlock_audio_device_t dev;
+    airlock_audio_format_t fmt;
+    airlock_status_t st;
     uint8_t pcm[4096];
     FILE *fp;
     long len;
     unsigned char hdr[44];
-    const char *path = "cellar-test-out.wav";
+    const char *path = "airlock-test-out.wav";
 
     /* Route the WAV sink to this test's output file. */
-    setenv("CELLAR_WAV_OUT", path, 1);
+    setenv("AIRLOCK_WAV_OUT", path, 1);
 
     /* Default backend must be non-NULL and have the core ops. */
     CHECK(be != NULL, "default backend exists");
@@ -55,8 +55,8 @@ int main(void)
           "backend implements required ops");
 
     /* Invalid args. */
-    st = cellar_audio_open(NULL, be, &fmt);
-    CHECK(st == CELLAR_ERR_INVALID_ARGUMENT, "open(NULL,...) rejected");
+    st = airlock_audio_open(NULL, be, &fmt);
+    CHECK(st == AIRLOCK_ERR_INVALID_ARGUMENT, "open(NULL,...) rejected");
 
     /* Open a 44100 Hz stereo 16-bit device. */
     memset(&fmt, 0, sizeof fmt);
@@ -67,19 +67,19 @@ int main(void)
     fmt.block_align = (uint16_t)(2 * fmt.channels);
     fmt.avg_bytes_per_sec = fmt.sample_rate * fmt.block_align;
 
-    st = cellar_audio_open(&dev, be, &fmt);
-    CHECK(st == CELLAR_OK, "audio open succeeds");
-    if (st != CELLAR_OK)
+    st = airlock_audio_open(&dev, be, &fmt);
+    CHECK(st == AIRLOCK_OK, "audio open succeeds");
+    if (st != AIRLOCK_OK)
         return 1;
 
     memset(pcm, 0, sizeof pcm);
-    st = cellar_audio_write(&dev, pcm, sizeof pcm);
-    CHECK(st == CELLAR_OK, "audio write succeeds");
-    CHECK(cellar_audio_position_ms(&dev) == 4096u * 1000u / fmt.avg_bytes_per_sec,
+    st = airlock_audio_write(&dev, pcm, sizeof pcm);
+    CHECK(st == AIRLOCK_OK, "audio write succeeds");
+    CHECK(airlock_audio_position_ms(&dev) == 4096u * 1000u / fmt.avg_bytes_per_sec,
           "position tracks bytes written");
 
-    st = cellar_audio_close(&dev);
-    CHECK(st == CELLAR_OK, "audio close succeeds");
+    st = airlock_audio_close(&dev);
+    CHECK(st == AIRLOCK_OK, "audio close succeeds");
 
     /* The WAV file must be a valid RIFF/WAVE with a 44-byte header. */
     fp = fopen(path, "rb");

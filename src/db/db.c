@@ -8,40 +8,40 @@
 #include <string.h>
 #include <strings.h>
 
-#include "cellar/cellar.h"
-#include "cellar/compat.h"
-#include "cellar/db.h"
+#include "airlock/airlock.h"
+#include "airlock/compat.h"
+#include "airlock/db.h"
 
-const char *cellar_rating_name(cellar_compat_rating_t r)
+const char *airlock_rating_name(airlock_compat_rating_t r)
 {
     switch (r) {
-    case CELLAR_RATING_HIGH:   return "HIGH";
-    case CELLAR_RATING_MEDIUM: return "MEDIUM";
-    case CELLAR_RATING_LOW:    return "LOW";
+    case AIRLOCK_RATING_HIGH:   return "HIGH";
+    case AIRLOCK_RATING_MEDIUM: return "MEDIUM";
+    case AIRLOCK_RATING_LOW:    return "LOW";
     default:                   return "UNKNOWN";
     }
 }
 
-void cellar_db_default_path(char *dst, size_t n)
+void airlock_db_default_path(char *dst, size_t n)
 {
-    cellar_path_join(dst, n, cellar_prefix_dir(), "compat.db");
+    airlock_path_join(dst, n, airlock_prefix_dir(), "compat.db");
 }
 
-cellar_status_t cellar_db_open(cellar_db_t *db, const char *path)
+airlock_status_t airlock_db_open(airlock_db_t *db, const char *path)
 {
     FILE *f;
     char line[512];
-    cellar_db_entry_t cur;
+    airlock_db_entry_t cur;
     int have = 0;
 
     if (!db || !path || !*path)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(db, 0, sizeof *db);
     snprintf(db->path, sizeof db->path, "%s", path);
 
     f = fopen(path, "r");
     if (!f)
-        return CELLAR_OK; /* empty database */
+        return AIRLOCK_OK; /* empty database */
 
     memset(&cur, 0, sizeof cur);
     while (fgets(line, sizeof line, f)) {
@@ -52,10 +52,10 @@ cellar_status_t cellar_db_open(cellar_db_t *db, const char *path)
         if (line[0] == '[') {
             char *end = strchr(line, ']');
             if (have)
-                cellar_db_put(db, &cur);
+                airlock_db_put(db, &cur);
             memset(&cur, 0, sizeof cur);
             if (end) *end = '\0';
-            cellar_strlcpy(cur.application, sizeof cur.application, line + 1);
+            airlock_strlcpy(cur.application, sizeof cur.application, line + 1);
             have = 1;
             continue;
         }
@@ -82,7 +82,7 @@ cellar_status_t cellar_db_open(cellar_db_t *db, const char *path)
             else if (strcmp(k, "vcruntime") == 0)
                 cur.needs_vcruntime = atoi(v);
             else if (strcmp(k, "rating") == 0)
-                cur.rating = (cellar_compat_rating_t)atoi(v);
+                cur.rating = (airlock_compat_rating_t)atoi(v);
             else if (strcmp(k, "issue") == 0 && cur.issue_count < 8) {
                 snprintf(cur.issues[cur.issue_count].text,
                          sizeof cur.issues[0].text, "%s", v);
@@ -91,12 +91,12 @@ cellar_status_t cellar_db_open(cellar_db_t *db, const char *path)
         }
     }
     if (have)
-        cellar_db_put(db, &cur);
+        airlock_db_put(db, &cur);
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_db_close(cellar_db_t *db)
+void airlock_db_close(airlock_db_t *db)
 {
     if (!db)
         return;
@@ -104,30 +104,30 @@ void cellar_db_close(cellar_db_t *db)
     memset(db, 0, sizeof *db);
 }
 
-cellar_status_t cellar_db_put(cellar_db_t *db, const cellar_db_entry_t *e)
+airlock_status_t airlock_db_put(airlock_db_t *db, const airlock_db_entry_t *e)
 {
     size_t i;
     if (!db || !e || !e->application[0])
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     for (i = 0; i < db->count; i++) {
         if (strcasecmp(db->entries[i].application, e->application) == 0) {
             db->entries[i] = *e;
-            return CELLAR_OK;
+            return AIRLOCK_OK;
         }
     }
     if (db->count == db->cap) {
         size_t ncap = db->cap ? db->cap * 2 : 8;
-        cellar_db_entry_t *n = realloc(db->entries, ncap * sizeof *n);
+        airlock_db_entry_t *n = realloc(db->entries, ncap * sizeof *n);
         if (!n)
-            return CELLAR_ERR_OUT_OF_MEMORY;
+            return AIRLOCK_ERR_OUT_OF_MEMORY;
         db->entries = n;
         db->cap = ncap;
     }
     db->entries[db->count++] = *e;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-const cellar_db_entry_t *cellar_db_find(const cellar_db_t *db, const char *app)
+const airlock_db_entry_t *airlock_db_find(const airlock_db_t *db, const char *app)
 {
     size_t i;
     if (!db || !app)
@@ -138,24 +138,24 @@ const cellar_db_entry_t *cellar_db_find(const cellar_db_t *db, const char *app)
     return NULL;
 }
 
-size_t cellar_db_count(const cellar_db_t *db)
+size_t airlock_db_count(const airlock_db_t *db)
 {
     return db ? db->count : 0;
 }
 
-const cellar_db_entry_t *cellar_db_at(const cellar_db_t *db, size_t i)
+const airlock_db_entry_t *airlock_db_at(const airlock_db_t *db, size_t i)
 {
     if (!db || i >= db->count)
         return NULL;
     return &db->entries[i];
 }
 
-cellar_status_t cellar_db_save(const cellar_db_t *db)
+airlock_status_t airlock_db_save(const airlock_db_t *db)
 {
     FILE *f;
     size_t i, j;
     if (!db || !db->path[0])
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     {
         char dir[1024];
         char *slash;
@@ -163,15 +163,15 @@ cellar_status_t cellar_db_save(const cellar_db_t *db)
         slash = strrchr(dir, '/');
         if (slash) {
             *slash = '\0';
-            cellar_mkdir_p(dir);
+            airlock_mkdir_p(dir);
         }
     }
     f = fopen(db->path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    fprintf(f, "# cellar-compat-db 1\n");
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    fprintf(f, "# airlock-compat-db 1\n");
     for (i = 0; i < db->count; i++) {
-        const cellar_db_entry_t *e = &db->entries[i];
+        const airlock_db_entry_t *e = &db->entries[i];
         fprintf(f, "[%s]\n", e->application);
         fprintf(f, "architecture=%s\n", e->architecture);
         fprintf(f, "graphics=%s\n", e->graphics);
@@ -185,12 +185,12 @@ cellar_status_t cellar_db_save(const cellar_db_t *db)
         fprintf(f, "\n");
     }
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_db_from_analysis(cellar_db_entry_t *e,
-                             const cellar_inspect_t *ins,
-                             const cellar_analysis_t *a)
+void airlock_db_from_analysis(airlock_db_entry_t *e,
+                             const airlock_inspect_t *ins,
+                             const airlock_analysis_t *a)
 {
     size_t i;
     int pct;
@@ -217,19 +217,19 @@ void cellar_db_from_analysis(cellar_db_entry_t *e,
         if (!e->input[0])
             snprintf(e->input, sizeof e->input, "%s", a->detected_input);
         if (!e->application[0])
-            cellar_strlcpy(e->application, sizeof e->application, a->called_by);
+            airlock_strlcpy(e->application, sizeof e->application, a->called_by);
         if (!e->architecture[0])
             snprintf(e->architecture, sizeof e->architecture, "%s",
                      a->is_64bit ? "x64" : "x86");
         pct = a->overall_percent;
         if (pct >= 90)
-            e->rating = CELLAR_RATING_HIGH;
+            e->rating = AIRLOCK_RATING_HIGH;
         else if (pct >= 60)
-            e->rating = CELLAR_RATING_MEDIUM;
+            e->rating = AIRLOCK_RATING_MEDIUM;
         else
-            e->rating = CELLAR_RATING_LOW;
+            e->rating = AIRLOCK_RATING_LOW;
         for (i = 0; i < a->issue_count && e->issue_count < 8; i++) {
-            if (a->issues[i].level == CELLAR_ISSUE_INFO)
+            if (a->issues[i].level == AIRLOCK_ISSUE_INFO)
                 continue;
             snprintf(e->issues[e->issue_count].text,
                      sizeof e->issues[0].text, "%s", a->issues[i].text);
@@ -238,7 +238,7 @@ void cellar_db_from_analysis(cellar_db_entry_t *e,
     }
 }
 
-void cellar_db_report(const cellar_db_entry_t *e)
+void airlock_db_report(const airlock_db_entry_t *e)
 {
     size_t i;
     if (!e)
@@ -252,7 +252,7 @@ void cellar_db_report(const cellar_db_entry_t *e)
     printf(".NET: %s\n", e->needs_dotnet ? "Required" : "not required");
     printf("VC Runtime: %s\n", e->needs_vcruntime ? "Required" : "not required");
     printf("\n");
-    printf("Compatibility: %s\n", cellar_rating_name(e->rating));
+    printf("Compatibility: %s\n", airlock_rating_name(e->rating));
     printf("Known issues: %zu\n", e->issue_count);
     for (i = 0; i < e->issue_count; i++)
         printf("  - %s\n", e->issues[i].text);

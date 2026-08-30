@@ -1,5 +1,5 @@
 /*
- * test_loader.c — unit tests for the Cellar PE loader.
+ * test_loader.c — unit tests for the Airlock PE loader.
  *
  * Uses a tiny hand-built PE32 executable synthesized in memory so the test
  * has no external fixture dependencies. Exercises header parsing, section
@@ -12,10 +12,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/loader.h"
-#include "cellar/pe.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/loader.h"
+#include "airlock/pe.h"
+#include "airlock/win32.h"
 
 static int g_failures = 0;
 
@@ -56,7 +56,7 @@ static void bput32(struct pe_buf *b, size_t off, uint32_t v)
 
 static size_t build_test_pe(struct pe_buf *b)
 {
-    size_t opt_size = sizeof(cellar_pe_optional_header_t);
+    size_t opt_size = sizeof(airlock_pe_optional_header_t);
     size_t section_off = OFF_OPT + opt_size;
     size_t total = RAW_OFF + RAW_SIZE;
     size_t i;
@@ -92,10 +92,10 @@ static size_t build_test_pe(struct pe_buf *b)
     /* Data directory: import (index 1) at RVA 0x1000, export (index 0) at 0x1100. */
     {
         size_t dd = OFF_OPT + 0x74; /* data_directory base within struct */
-        bput32(b, dd + CELLAR_PE_DIR_EXPORT * 8 + 0, 0x1100);
-        bput32(b, dd + CELLAR_PE_DIR_EXPORT * 8 + 4, 0x80);
-        bput32(b, dd + CELLAR_PE_DIR_IMPORT * 8 + 0, 0x1000);
-        bput32(b, dd + CELLAR_PE_DIR_IMPORT * 8 + 4, 0x40);
+        bput32(b, dd + AIRLOCK_PE_DIR_EXPORT * 8 + 0, 0x1100);
+        bput32(b, dd + AIRLOCK_PE_DIR_EXPORT * 8 + 4, 0x80);
+        bput32(b, dd + AIRLOCK_PE_DIR_IMPORT * 8 + 0, 0x1000);
+        bput32(b, dd + AIRLOCK_PE_DIR_IMPORT * 8 + 4, 0x40);
     }
 
     /* Section table (1 entry). */
@@ -160,19 +160,19 @@ static size_t build_test_pe(struct pe_buf *b)
 static void test_load_and_resolve(void)
 {
     struct pe_buf b = {0};
-    cellar_image_t img;
-    cellar_status_t st;
+    airlock_image_t img;
+    airlock_status_t st;
     size_t total = build_test_pe(&b);
     size_t i;
     int found_exit = 0, found_std = 0, found_other = 0;
 
     CHECK(total > 0, "build_test_pe returned nonzero size");
 
-    st = cellar_image_load_buffer(b.p, total,
-                                  CELLAR_LOAD_DEFAULT |
-                                  CELLAR_LOAD_PARSE_EXPORTS, &img);
-    CHECK(st == CELLAR_OK, "load_buffer succeeds");
-    if (st != CELLAR_OK) {
+    st = airlock_image_load_buffer(b.p, total,
+                                  AIRLOCK_LOAD_DEFAULT |
+                                  AIRLOCK_LOAD_PARSE_EXPORTS, &img);
+    CHECK(st == AIRLOCK_OK, "load_buffer succeeds");
+    if (st != AIRLOCK_OK) {
         free(b.p);
         return;
     }
@@ -186,16 +186,16 @@ static void test_load_and_resolve(void)
     CHECK(img.export_name_count == 2, "two exports parsed");
 
     /* RVA translation. */
-    CHECK(cellar_image_rva(&img, 0x1000) == img.mapped + 0x1000,
+    CHECK(airlock_image_rva(&img, 0x1000) == img.mapped + 0x1000,
           "RVA maps into mapped image");
-    CHECK(cellar_image_rva(&img, 0x1000 + 0x100) == img.mapped + 0x1100,
+    CHECK(airlock_image_rva(&img, 0x1000 + 0x100) == img.mapped + 0x1100,
           "RVA in section maps correctly");
-    CHECK(cellar_image_rva(&img, 0x100000) == NULL,
+    CHECK(airlock_image_rva(&img, 0x100000) == NULL,
           "RVA outside image returns NULL");
 
     /* Import bindings. */
     for (i = 0; i < img.import_count; i++) {
-        const cellar_import_t *im = &img.imports[i];
+        const airlock_import_t *im = &img.imports[i];
         if (im->name && strcmp(im->name, "ExitProcess") == 0) {
             found_exit = 1;
             CHECK(im->resolved != NULL, "ExitProcess resolves to a stub");
@@ -216,45 +216,45 @@ static void test_load_and_resolve(void)
     CHECK(strcmp(img.export_names[1], "FnTwo") == 0,
           "second export name is FnTwo");
 
-    cellar_image_unload(&img);
+    airlock_image_unload(&img);
     free(b.p);
 }
 
 static void test_negative_cases(void)
 {
-    cellar_image_t img;
-    cellar_status_t st;
+    airlock_image_t img;
+    airlock_status_t st;
     uint8_t garbage[256];
 
     /* Not a PE at all. */
     memset(garbage, 0x41, sizeof garbage);
-    st = cellar_image_load_buffer(garbage, sizeof garbage,
-                                  CELLAR_LOAD_DEFAULT, &img);
-    CHECK(st == CELLAR_ERR_PE_NOT_PE, "garbage is rejected as PE_NOT_PE");
+    st = airlock_image_load_buffer(garbage, sizeof garbage,
+                                  AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_ERR_PE_NOT_PE, "garbage is rejected as PE_NOT_PE");
 
     /* Truncated buffer. */
-    st = cellar_image_load_buffer(garbage, 4, CELLAR_LOAD_DEFAULT, &img);
-    CHECK(st == CELLAR_ERR_PE_TRUNCATED, "short buffer is TRUNCATED");
+    st = airlock_image_load_buffer(garbage, 4, AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_ERR_PE_TRUNCATED, "short buffer is TRUNCATED");
 
     /* NULL arguments. */
-    st = cellar_image_load_buffer(NULL, 10, CELLAR_LOAD_DEFAULT, &img);
-    CHECK(st == CELLAR_ERR_INVALID_ARGUMENT, "NULL buffer rejected");
+    st = airlock_image_load_buffer(NULL, 10, AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_ERR_INVALID_ARGUMENT, "NULL buffer rejected");
 }
 
 static void test_status_strings(void)
 {
-    CHECK(strcmp(cellar_status_string(CELLAR_OK), "ok") == 0,
+    CHECK(strcmp(airlock_status_string(AIRLOCK_OK), "ok") == 0,
           "status string for OK");
-    CHECK(strcmp(cellar_status_string(CELLAR_ERR_PE_NOT_PE),
+    CHECK(strcmp(airlock_status_string(AIRLOCK_ERR_PE_NOT_PE),
                  "not a PE image (bad MZ/PE signature)") == 0,
           "status string for PE_NOT_PE");
-    CHECK(cellar_status_string((cellar_status_t)9999) != NULL,
+    CHECK(airlock_status_string((airlock_status_t)9999) != NULL,
           "unknown status returns a string");
 }
 
 int main(void)
 {
-    cellar_win32_init();
+    airlock_win32_init();
 
     test_load_and_resolve();
     test_negative_cases();

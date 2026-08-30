@@ -1,8 +1,8 @@
 /*
  * testlab.c — compatibility test lab.
  *
- * Each case verifies one Windows behavior against Cellar's implementation.
- * `cellar_lab_run` also auto-generates an export-presence test for every
+ * Each case verifies one Windows behavior against Airlock's implementation.
+ * `airlock_lab_run` also auto-generates an export-presence test for every
  * function currently registered in the Win32 layer, so the lab grows with
  * the API surface.
  *
@@ -12,23 +12,23 @@
 #include <string.h>
 #include <time.h>
 
-#include "cellar/a11y.h"
-#include "cellar/cellar.h"
-#include "cellar/com.h"
-#include "cellar/compat.h"
-#include "cellar/desktop.h"
-#include "cellar/device.h"
-#include "cellar/display.h"
-#include "cellar/locale.h"
-#include "cellar/notify.h"
-#include "cellar/print.h"
-#include "cellar/security.h"
-#include "cellar/service.h"
-#include "cellar/shell.h"
-#include "cellar/testlab.h"
-#include "cellar/win32.h"
+#include "airlock/a11y.h"
+#include "airlock/airlock.h"
+#include "airlock/com.h"
+#include "airlock/compat.h"
+#include "airlock/desktop.h"
+#include "airlock/device.h"
+#include "airlock/display.h"
+#include "airlock/locale.h"
+#include "airlock/notify.h"
+#include "airlock/print.h"
+#include "airlock/security.h"
+#include "airlock/service.h"
+#include "airlock/shell.h"
+#include "airlock/testlab.h"
+#include "airlock/win32.h"
 
-typedef cellar_lab_result_t (*lab_fn)(void);
+typedef airlock_lab_result_t (*lab_fn)(void);
 
 typedef struct lab_case {
     const char *suite;
@@ -36,85 +36,85 @@ typedef struct lab_case {
     lab_fn fn;
 } lab_case_t;
 
-static cellar_lab_result_t pass_if(int cond)
+static airlock_lab_result_t pass_if(int cond)
 {
-    return cond ? CELLAR_LAB_PASS : CELLAR_LAB_FAIL;
+    return cond ? AIRLOCK_LAB_PASS : AIRLOCK_LAB_FAIL;
 }
 
-static cellar_lab_result_t t_kernel32_exports(void)
+static airlock_lab_result_t t_kernel32_exports(void)
 {
-    return pass_if(cellar_win32_export_exists("KERNEL32.dll", "ExitProcess") &&
-                   cellar_win32_export_exists("KERNEL32.dll", "GetLastError"));
+    return pass_if(airlock_win32_export_exists("KERNEL32.dll", "ExitProcess") &&
+                   airlock_win32_export_exists("KERNEL32.dll", "GetLastError"));
 }
 
-static cellar_lab_result_t t_user32_messagebox(void)
+static airlock_lab_result_t t_user32_messagebox(void)
 {
-    return pass_if(cellar_win32_export_exists("USER32.dll", "MessageBoxA"));
+    return pass_if(airlock_win32_export_exists("USER32.dll", "MessageBoxA"));
 }
 
-static cellar_lab_result_t t_ntdll_rtlgetversion(void)
+static airlock_lab_result_t t_ntdll_rtlgetversion(void)
 {
-    return pass_if(cellar_win32_export_exists("ntdll.dll", "RtlGetVersion"));
+    return pass_if(airlock_win32_export_exists("ntdll.dll", "RtlGetVersion"));
 }
 
-static cellar_lab_result_t t_advapi_reg(void)
+static airlock_lab_result_t t_advapi_reg(void)
 {
-    return pass_if(cellar_win32_export_exists("ADVAPI32.dll", "RegOpenKeyExA"));
+    return pass_if(airlock_win32_export_exists("ADVAPI32.dll", "RegOpenKeyExA"));
 }
 
-static cellar_lab_result_t t_ws2_startup(void)
+static airlock_lab_result_t t_ws2_startup(void)
 {
-    return pass_if(cellar_win32_export_exists("ws2_32.dll", "WSAStartup"));
+    return pass_if(airlock_win32_export_exists("ws2_32.dll", "WSAStartup"));
 }
 
-static cellar_lab_result_t t_ole32_coinit(void)
+static airlock_lab_result_t t_ole32_coinit(void)
 {
-    return pass_if(cellar_win32_export_exists("ole32.dll", "CoInitializeEx"));
+    return pass_if(airlock_win32_export_exists("ole32.dll", "CoInitializeEx"));
 }
 
-static cellar_lab_result_t t_shell32_folder(void)
+static airlock_lab_result_t t_shell32_folder(void)
 {
-    return pass_if(cellar_win32_export_exists("shell32.dll", "SHGetFolderPathA"));
+    return pass_if(airlock_win32_export_exists("shell32.dll", "SHGetFolderPathA"));
 }
 
-static cellar_lab_result_t t_gdi32_caps(void)
+static airlock_lab_result_t t_gdi32_caps(void)
 {
-    return pass_if(cellar_win32_export_exists("gdi32.dll", "GetDeviceCaps"));
+    return pass_if(airlock_win32_export_exists("gdi32.dll", "GetDeviceCaps"));
 }
 
-static cellar_lab_result_t t_version_ex(void)
+static airlock_lab_result_t t_version_ex(void)
 {
-    return pass_if(cellar_win32_export_exists("version.dll", "GetFileVersionInfoSizeA") ||
-                   cellar_win32_export_exists("KERNEL32.dll", "GetVersionExA"));
+    return pass_if(airlock_win32_export_exists("version.dll", "GetFileVersionInfoSizeA") ||
+                   airlock_win32_export_exists("KERNEL32.dll", "GetVersionExA"));
 }
 
-static cellar_lab_result_t t_display_primary(void)
+static airlock_lab_result_t t_display_primary(void)
 {
-    const cellar_monitor_t *m = cellar_display_primary(cellar_display_current());
+    const airlock_monitor_t *m = airlock_display_primary(airlock_display_current());
     return pass_if(m && m->width == 1920 && m->height == 1080 &&
-                   cellar_display_scale(m) == 1.0f);
+                   airlock_display_scale(m) == 1.0f);
 }
 
-static cellar_lab_result_t t_locale_cp1252(void)
+static airlock_lab_result_t t_locale_cp1252(void)
 {
     const uint8_t in[] = { 'A', 0x80 }; /* A + euro */
     char out[16];
-    int n = cellar_cp_to_utf8(CELLAR_CP_1252, in, 2, out, sizeof out);
+    int n = airlock_cp_to_utf8(AIRLOCK_CP_1252, in, 2, out, sizeof out);
     return pass_if(n > 1 && out[0] == 'A');
 }
 
-static cellar_lab_result_t t_locale_number(void)
+static airlock_lab_result_t t_locale_number(void)
 {
     char buf[32];
-    cellar_locale_t l;
-    cellar_locale_english_us(&l);
-    cellar_locale_set(&l);
-    if (cellar_locale_format_number(1234.5, buf, sizeof buf) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
+    airlock_locale_t l;
+    airlock_locale_english_us(&l);
+    airlock_locale_set(&l);
+    if (airlock_locale_format_number(1234.5, buf, sizeof buf) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
     return pass_if(strstr(buf, "1,234") != NULL);
 }
 
-static cellar_lab_result_t t_locale_date(void)
+static airlock_lab_result_t t_locale_date(void)
 {
     struct tm t;
     char buf[32];
@@ -122,166 +122,166 @@ static cellar_lab_result_t t_locale_date(void)
     t.tm_year = 126; /* 2026 */
     t.tm_mon = 7;
     t.tm_mday = 30;
-    if (cellar_locale_format_date(&t, buf, sizeof buf) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
+    if (airlock_locale_format_date(&t, buf, sizeof buf) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
     return pass_if(strcmp(buf, "08/30/2026") == 0);
 }
 
-static cellar_lab_result_t t_security_acl(void)
+static airlock_lab_result_t t_security_acl(void)
 {
-    cellar_token_t tok;
-    cellar_sd_t sd;
-    cellar_sid_t other;
+    airlock_token_t tok;
+    airlock_sd_t sd;
+    airlock_sid_t other;
     memset(&sd, 0, sizeof sd);
-    cellar_token_default(&tok);
-    cellar_sid_make(&sd.owner, 5, 1000);
-    cellar_sid_make(&other, 5, 1001);
-    cellar_acl_add(&sd.dacl, 1, &tok.user, CELLAR_ACCESS_READ);
-    if (!cellar_acl_check(&sd, &tok, CELLAR_ACCESS_READ))
-        return CELLAR_LAB_FAIL;
-    if (cellar_acl_check(&sd, &tok, CELLAR_ACCESS_WRITE))
-        return CELLAR_LAB_FAIL;
-    cellar_token_impersonate(&tok, &other);
-    if (cellar_acl_check(&sd, &tok, CELLAR_ACCESS_READ))
-        return CELLAR_LAB_FAIL; /* impersonated as other, no ACE */
-    cellar_token_revert(&tok);
-    return CELLAR_LAB_PASS;
+    airlock_token_default(&tok);
+    airlock_sid_make(&sd.owner, 5, 1000);
+    airlock_sid_make(&other, 5, 1001);
+    airlock_acl_add(&sd.dacl, 1, &tok.user, AIRLOCK_ACCESS_READ);
+    if (!airlock_acl_check(&sd, &tok, AIRLOCK_ACCESS_READ))
+        return AIRLOCK_LAB_FAIL;
+    if (airlock_acl_check(&sd, &tok, AIRLOCK_ACCESS_WRITE))
+        return AIRLOCK_LAB_FAIL;
+    airlock_token_impersonate(&tok, &other);
+    if (airlock_acl_check(&sd, &tok, AIRLOCK_ACCESS_READ))
+        return AIRLOCK_LAB_FAIL; /* impersonated as other, no ACE */
+    airlock_token_revert(&tok);
+    return AIRLOCK_LAB_PASS;
 }
 
-static cellar_lab_result_t t_com_refcount(void)
+static airlock_lab_result_t t_com_refcount(void)
 {
     void *obj = NULL;
-    cellar_iunknown_t *iu;
+    airlock_iunknown_t *iu;
     uint32_t r;
-    cellar_com_uninit();
-    if (cellar_com_init(CELLAR_APT_MTA) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    cellar_com_register_builtins();
-    if (cellar_com_create(&CELLAR_CLSID_NULL, &CELLAR_IID_IUNKNOWN, &obj) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    iu = (cellar_iunknown_t *)obj;
+    airlock_com_uninit();
+    if (airlock_com_init(AIRLOCK_APT_MTA) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    airlock_com_register_builtins();
+    if (airlock_com_create(&AIRLOCK_CLSID_NULL, &AIRLOCK_IID_IUNKNOWN, &obj) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    iu = (airlock_iunknown_t *)obj;
     /* factory AddRef(1) + QueryInterface AddRef(2) */
     r = iu->vtbl->add_ref(iu);
     if (r != 3)
-        return CELLAR_LAB_FAIL;
+        return AIRLOCK_LAB_FAIL;
     if (iu->vtbl->release(iu) != 2)
-        return CELLAR_LAB_FAIL;
+        return AIRLOCK_LAB_FAIL;
     if (iu->vtbl->release(iu) != 1)
-        return CELLAR_LAB_FAIL;
+        return AIRLOCK_LAB_FAIL;
     if (iu->vtbl->release(iu) != 0)
-        return CELLAR_LAB_FAIL;
-    cellar_com_uninit();
-    return CELLAR_LAB_PASS;
+        return AIRLOCK_LAB_FAIL;
+    airlock_com_uninit();
+    return AIRLOCK_LAB_PASS;
 }
 
-static cellar_lab_result_t t_com_marshal(void)
+static airlock_lab_result_t t_com_marshal(void)
 {
     void *obj = NULL;
-    cellar_iunknown_t *iu, *back = NULL;
+    airlock_iunknown_t *iu, *back = NULL;
     uint8_t buf[32];
     size_t n = 0;
-    cellar_com_init(CELLAR_APT_MTA);
-    cellar_com_register_builtins();
-    if (cellar_com_create(&CELLAR_CLSID_NULL, &CELLAR_IID_IUNKNOWN, &obj) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    iu = (cellar_iunknown_t *)obj;
-    if (cellar_com_marshal(iu, buf, sizeof buf, &n) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    if (cellar_com_unmarshal(buf, n, &back) != CELLAR_OK || back != iu)
-        return CELLAR_LAB_FAIL;
+    airlock_com_init(AIRLOCK_APT_MTA);
+    airlock_com_register_builtins();
+    if (airlock_com_create(&AIRLOCK_CLSID_NULL, &AIRLOCK_IID_IUNKNOWN, &obj) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    iu = (airlock_iunknown_t *)obj;
+    if (airlock_com_marshal(iu, buf, sizeof buf, &n) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    if (airlock_com_unmarshal(buf, n, &back) != AIRLOCK_OK || back != iu)
+        return AIRLOCK_LAB_FAIL;
     iu->vtbl->release(iu); /* marshal AddRef */
     iu->vtbl->release(iu); /* QueryInterface AddRef */
     iu->vtbl->release(iu); /* factory AddRef */
-    cellar_com_uninit();
-    return CELLAR_LAB_PASS;
+    airlock_com_uninit();
+    return AIRLOCK_LAB_PASS;
 }
 
-static cellar_lab_result_t t_guid_parse(void)
+static airlock_lab_result_t t_guid_parse(void)
 {
-    cellar_guid_t g;
+    airlock_guid_t g;
     char fmt[64];
-    if (cellar_guid_parse("{00000000-0000-0000-C000-000000000046}", &g) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    if (!cellar_guid_eq(&g, &CELLAR_IID_IUNKNOWN))
-        return CELLAR_LAB_FAIL;
-    cellar_guid_format(&g, fmt, sizeof fmt);
+    if (airlock_guid_parse("{00000000-0000-0000-C000-000000000046}", &g) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    if (!airlock_guid_eq(&g, &AIRLOCK_IID_IUNKNOWN))
+        return AIRLOCK_LAB_FAIL;
+    airlock_guid_format(&g, fmt, sizeof fmt);
     return pass_if(strstr(fmt, "00000000") != NULL);
 }
 
-static cellar_lab_result_t t_notify(void)
+static airlock_lab_result_t t_notify(void)
 {
-    cellar_notification_t n, hist[4];
+    airlock_notification_t n, hist[4];
     uint32_t id;
     memset(&n, 0, sizeof n);
     snprintf(n.summary, sizeof n.summary, "hello");
-    id = cellar_notify_show(&n);
-    if (id == 0 || cellar_notify_history(hist, 4) == 0)
-        return CELLAR_LAB_FAIL;
-    return pass_if(cellar_notify_close(id) == CELLAR_OK);
+    id = airlock_notify_show(&n);
+    if (id == 0 || airlock_notify_history(hist, 4) == 0)
+        return AIRLOCK_LAB_FAIL;
+    return pass_if(airlock_notify_close(id) == AIRLOCK_OK);
 }
 
-static cellar_lab_result_t t_a11y(void)
+static airlock_lab_result_t t_a11y(void)
 {
     uint32_t btn, kids[4];
-    const cellar_a11y_node_t *node;
-    cellar_a11y_reset();
-    btn = cellar_a11y_create(0, CELLAR_A11Y_BUTTON, "OK");
+    const airlock_a11y_node_t *node;
+    airlock_a11y_reset();
+    btn = airlock_a11y_create(0, AIRLOCK_A11Y_BUTTON, "OK");
     if (!btn)
-        return CELLAR_LAB_FAIL;
-    cellar_a11y_set_value(btn, "pressed");
-    node = cellar_a11y_get(btn);
+        return AIRLOCK_LAB_FAIL;
+    airlock_a11y_set_value(btn, "pressed");
+    node = airlock_a11y_get(btn);
     if (!node || strcmp(node->name, "OK") != 0)
-        return CELLAR_LAB_FAIL;
-    return pass_if(cellar_a11y_children(1, kids, 4) >= 1);
+        return AIRLOCK_LAB_FAIL;
+    return pass_if(airlock_a11y_children(1, kids, 4) >= 1);
 }
 
-static cellar_lab_result_t t_print(void)
+static airlock_lab_result_t t_print(void)
 {
-    cellar_print_job_t job;
+    airlock_print_job_t job;
     const char *doc = "hello";
-    if (cellar_print_job(NULL, "test", doc, 5, "/tmp", &job) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
+    if (airlock_print_job(NULL, "test", doc, 5, "/tmp", &job) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
     return pass_if(job.completed && job.bytes == 5);
 }
 
-static cellar_lab_result_t t_device(void)
+static airlock_lab_result_t t_device(void)
 {
     uint32_t id = 0;
-    cellar_device_reset();
-    if (cellar_device_attach(CELLAR_DEV_CONTROLLER, "Xbox pad", "XInput", &id) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    if (!cellar_device_get(id))
-        return CELLAR_LAB_FAIL;
-    return pass_if(cellar_device_detach(id) == CELLAR_OK);
+    airlock_device_reset();
+    if (airlock_device_attach(AIRLOCK_DEV_CONTROLLER, "Xbox pad", "XInput", &id) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    if (!airlock_device_get(id))
+        return AIRLOCK_LAB_FAIL;
+    return pass_if(airlock_device_detach(id) == AIRLOCK_OK);
 }
 
-static cellar_lab_result_t t_clipboard(void)
+static airlock_lab_result_t t_clipboard(void)
 {
     char buf[64];
-    cellar_clipboard_set("clip");
-    cellar_clipboard_get(buf, sizeof buf);
+    airlock_clipboard_set("clip");
+    airlock_clipboard_get(buf, sizeof buf);
     return pass_if(strcmp(buf, "clip") == 0);
 }
 
-static cellar_lab_result_t t_service(void)
+static airlock_lab_result_t t_service(void)
 {
-    const cellar_service_t *q;
-    cellar_svc_register("Spooler", NULL);
-    if (cellar_svc_start("Spooler") != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    q = cellar_svc_query("Spooler");
-    if (!q || q->state != CELLAR_SVC_RUNNING || !q->user_space)
-        return CELLAR_LAB_FAIL;
-    cellar_svc_stop("Spooler");
-    q = cellar_svc_query("Spooler");
-    return pass_if(q && q->state == CELLAR_SVC_STOPPED);
+    const airlock_service_t *q;
+    airlock_svc_register("Spooler", NULL);
+    if (airlock_svc_start("Spooler") != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    q = airlock_svc_query("Spooler");
+    if (!q || q->state != AIRLOCK_SVC_RUNNING || !q->user_space)
+        return AIRLOCK_LAB_FAIL;
+    airlock_svc_stop("Spooler");
+    q = airlock_svc_query("Spooler");
+    return pass_if(q && q->state == AIRLOCK_SVC_STOPPED);
 }
 
-static cellar_lab_result_t t_display_multimon(void)
+static airlock_lab_result_t t_display_multimon(void)
 {
-    cellar_display_t d;
-    cellar_monitor_t m;
-    cellar_display_init_default(&d);
+    airlock_display_t d;
+    airlock_monitor_t m;
+    airlock_display_init_default(&d);
     memset(&m, 0, sizeof m);
     snprintf(m.name, sizeof m.name, "DISPLAY2");
     m.width = 1280;
@@ -289,19 +289,19 @@ static cellar_lab_result_t t_display_multimon(void)
     m.dpi = 144;
     m.refresh_hz = 144;
     m.hdr = 1;
-    m.orientation = CELLAR_ORIENT_PORTRAIT;
-    if (cellar_display_add_monitor(&d, &m) != CELLAR_OK)
-        return CELLAR_LAB_FAIL;
-    cellar_display_set_mode(&d, CELLAR_WINDOW_FULLSCREEN);
-    return pass_if(d.count == 2 && d.mode == CELLAR_WINDOW_FULLSCREEN &&
-                   cellar_display_scale(&d.monitors[1]) > 1.0f);
+    m.orientation = AIRLOCK_ORIENT_PORTRAIT;
+    if (airlock_display_add_monitor(&d, &m) != AIRLOCK_OK)
+        return AIRLOCK_LAB_FAIL;
+    airlock_display_set_mode(&d, AIRLOCK_WINDOW_FULLSCREEN);
+    return pass_if(d.count == 2 && d.mode == AIRLOCK_WINDOW_FULLSCREEN &&
+                   airlock_display_scale(&d.monitors[1]) > 1.0f);
 }
 
-static cellar_lab_result_t t_sid_system_uid(void)
+static airlock_lab_result_t t_sid_system_uid(void)
 {
-    cellar_sid_t sys;
-    cellar_sid_make(&sys, 5, 18);
-    return pass_if(cellar_sid_to_uid(&sys) == 0);
+    airlock_sid_t sys;
+    airlock_sid_make(&sys, 5, 18);
+    return pass_if(airlock_sid_to_uid(&sys) == 0);
 }
 
 static const lab_case_t k_cases[] = {
@@ -332,17 +332,17 @@ static const lab_case_t k_cases[] = {
     { "service",   "user-space service start/stop",    t_service },
 };
 
-cellar_status_t cellar_lab_run(cellar_lab_report_t *out)
+airlock_status_t airlock_lab_run(airlock_lab_report_t *out)
 {
     size_t i, m, e;
-    cellar_lab_report_t r;
+    airlock_lab_report_t r;
     memset(&r, 0, sizeof r);
 
     for (i = 0; i < sizeof k_cases / sizeof k_cases[0]; i++) {
-        cellar_lab_result_t res = k_cases[i].fn();
+        airlock_lab_result_t res = k_cases[i].fn();
         r.total++;
-        if (res == CELLAR_LAB_PASS) r.passed++;
-        else if (res == CELLAR_LAB_SKIP) r.skipped++;
+        if (res == AIRLOCK_LAB_PASS) r.passed++;
+        else if (res == AIRLOCK_LAB_SKIP) r.skipped++;
         else {
             r.failed++;
             fprintf(stderr, "lab FAIL %s/%s\n", k_cases[i].suite, k_cases[i].name);
@@ -350,13 +350,13 @@ cellar_status_t cellar_lab_run(cellar_lab_report_t *out)
     }
 
     /* Auto: every registered export is resolvable by name. */
-    for (m = 0; m < cellar_win32_module_count(); m++) {
-        const cellar_module_t *mod = cellar_win32_module_at(m);
+    for (m = 0; m < airlock_win32_module_count(); m++) {
+        const airlock_module_t *mod = airlock_win32_module_at(m);
         if (!mod)
             continue;
         for (e = 0; e < mod->count; e++) {
             r.total++;
-            if (cellar_win32_lookup(mod->name, mod->exports[e].name))
+            if (airlock_win32_lookup(mod->name, mod->exports[e].name))
                 r.passed++;
             else {
                 r.failed++;
@@ -369,10 +369,10 @@ cellar_status_t cellar_lab_run(cellar_lab_report_t *out)
     r.percent = r.total ? (100.0 * (double)r.passed / (double)r.total) : 100.0;
     if (out)
         *out = r;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_lab_print(const cellar_lab_report_t *r)
+void airlock_lab_print(const airlock_lab_report_t *r)
 {
     if (!r)
         return;

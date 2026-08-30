@@ -3,8 +3,8 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#include "cellar/cellar.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -16,26 +16,26 @@
 typedef int BOOL;
 
 /* OPENFILENAMEA is a large struct; we only need to exist for the import. */
-static BOOL WINAPI cellar_GetOpenFileNameA(void *ofn)
+static BOOL WINAPI airlock_GetOpenFileNameA(void *ofn)
 {
     UNUSED(ofn);
-    CELLAR_LOG_INFO("COMDLG32.GetOpenFileNameA — cancelled (no UI yet)");
+    AIRLOCK_LOG_INFO("COMDLG32.GetOpenFileNameA — cancelled (no UI yet)");
     return 0;
 }
 
-static BOOL WINAPI cellar_GetSaveFileNameA(void *ofn)
+static BOOL WINAPI airlock_GetSaveFileNameA(void *ofn)
 {
     UNUSED(ofn);
     return 0;
 }
 
-static const cellar_export_entry_t k_exports[] = {
-    { "GetOpenFileNameA", (void *)&cellar_GetOpenFileNameA },
-    { "GetSaveFileNameA", (void *)&cellar_GetSaveFileNameA },
+static const airlock_export_entry_t k_exports[] = {
+    { "GetOpenFileNameA", (void *)&airlock_GetOpenFileNameA },
+    { "GetSaveFileNameA", (void *)&airlock_GetSaveFileNameA },
 };
 
-static const cellar_module_t k_mod = {
+static const airlock_module_t k_mod = {
     "comdlg32.dll", k_exports, sizeof k_exports / sizeof k_exports[0]
 };
 
-const cellar_module_t *cellar_win32_module_comdlg32(void) { return &k_mod; }
+const airlock_module_t *airlock_win32_module_comdlg32(void) { return &k_mod; }

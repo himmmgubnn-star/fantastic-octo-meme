@@ -24,12 +24,12 @@
 #include <linux/futex.h>
 #endif
 
-#include "cellar/cellar.h"
-#include "cellar/sync.h"
+#include "airlock/airlock.h"
+#include "airlock/sync.h"
 
 /* ---- Futex primitives ------------------------------------------------------ */
 
-int cellar_futex_wait(volatile int *uaddr, int val, uint64_t timeout_ms)
+int airlock_futex_wait(volatile int *uaddr, int val, uint64_t timeout_ms)
 {
 #ifdef __linux__
     struct timespec ts, *tsp = NULL;
@@ -55,7 +55,7 @@ int cellar_futex_wait(volatile int *uaddr, int val, uint64_t timeout_ms)
 #endif
 }
 
-void cellar_futex_wake(volatile int *uaddr, int count)
+void airlock_futex_wake(volatile int *uaddr, int count)
 {
 #ifdef __linux__
     syscall(SYS_futex, uaddr, FUTEX_WAKE_PRIVATE, count, NULL, NULL, 0);
@@ -66,9 +66,9 @@ void cellar_futex_wake(volatile int *uaddr, int count)
 
 /* ---- Spinlock -------------------------------------------------------------- */
 
-void cellar_spinlock_init(cellar_spinlock_t *l) { l->state = 0; }
+void airlock_spinlock_init(airlock_spinlock_t *l) { l->state = 0; }
 
-void cellar_spinlock_lock(cellar_spinlock_t *l)
+void airlock_spinlock_lock(airlock_spinlock_t *l)
 {
     for (;;) {
         if (atomic_exchange((atomic_int *)&l->state, 1) == 0)
@@ -78,21 +78,21 @@ void cellar_spinlock_lock(cellar_spinlock_t *l)
     }
 }
 
-int cellar_spinlock_trylock(cellar_spinlock_t *l)
+int airlock_spinlock_trylock(airlock_spinlock_t *l)
 {
     return atomic_exchange((atomic_int *)&l->state, 1) == 0;
 }
 
-void cellar_spinlock_unlock(cellar_spinlock_t *l)
+void airlock_spinlock_unlock(airlock_spinlock_t *l)
 {
     atomic_store((atomic_int *)&l->state, 0);
 }
 
 /* ---- Futex mutex ----------------------------------------------------------- */
 
-void cellar_mutex_init(cellar_mutex_t *m) { m->state = 0; }
+void airlock_mutex_init(airlock_mutex_t *m) { m->state = 0; }
 
-void cellar_mutex_lock(cellar_mutex_t *m)
+void airlock_mutex_lock(airlock_mutex_t *m)
 {
     int expected = 0;
     /* Fast path: 0 -> 1, uncontended (no syscall). */
@@ -102,7 +102,7 @@ void cellar_mutex_lock(cellar_mutex_t *m)
     if (expected != 2)
         atomic_exchange((atomic_int *)&m->state, 2);
     for (;;) {
-        cellar_futex_wait(&m->state, 2, 0);
+        airlock_futex_wait(&m->state, 2, 0);
         expected = 0;
         if (atomic_compare_exchange_weak((atomic_int *)&m->state, &expected, 2))
             break;
@@ -110,63 +110,63 @@ void cellar_mutex_lock(cellar_mutex_t *m)
     }
 }
 
-int cellar_mutex_trylock(cellar_mutex_t *m)
+int airlock_mutex_trylock(airlock_mutex_t *m)
 {
     return atomic_exchange((atomic_int *)&m->state, 1) == 0;
 }
 
-void cellar_mutex_unlock(cellar_mutex_t *m)
+void airlock_mutex_unlock(airlock_mutex_t *m)
 {
     if (atomic_exchange((atomic_int *)&m->state, 0) == 2)
-        cellar_futex_wake(&m->state, 1);
+        airlock_futex_wake(&m->state, 1);
 }
 
-void cellar_mutex_destroy(cellar_mutex_t *m) { (void)m; }
+void airlock_mutex_destroy(airlock_mutex_t *m) { (void)m; }
 
 /* ---- Futex event ----------------------------------------------------------- */
 
-void cellar_event_init(cellar_event_t *e) { e->signaled = 0; }
+void airlock_event_init(airlock_event_t *e) { e->signaled = 0; }
 
-void cellar_event_set(cellar_event_t *e)
+void airlock_event_set(airlock_event_t *e)
 {
     atomic_store((atomic_int *)&e->signaled, 1);
-    cellar_futex_wake(&e->signaled, 1);
+    airlock_futex_wake(&e->signaled, 1);
 }
 
-void cellar_event_reset(cellar_event_t *e)
+void airlock_event_reset(airlock_event_t *e)
 {
     atomic_store((atomic_int *)&e->signaled, 0);
 }
 
-void cellar_event_wait(cellar_event_t *e)
+void airlock_event_wait(airlock_event_t *e)
 {
     for (;;) {
         if (atomic_load((atomic_int *)&e->signaled))
             break;
-        cellar_futex_wait(&e->signaled, 0, 0);
+        airlock_futex_wait(&e->signaled, 0, 0);
     }
 }
 
 /* ---- Futex semaphore ------------------------------------------------------- */
 
-void cellar_semaphore_init(cellar_semaphore_t *s, int initial)
+void airlock_semaphore_init(airlock_semaphore_t *s, int initial)
 {
     s->count = initial;
 }
 
-void cellar_semaphore_post(cellar_semaphore_t *s)
+void airlock_semaphore_post(airlock_semaphore_t *s)
 {
     (void)atomic_fetch_add((atomic_int *)&s->count, 1);
-    cellar_futex_wake(&s->count, 1);
+    airlock_futex_wake(&s->count, 1);
 }
 
-void cellar_semaphore_wait(cellar_semaphore_t *s)
+void airlock_semaphore_wait(airlock_semaphore_t *s)
 {
     for (;;) {
         int c = atomic_load((atomic_int *)&s->count);
         if (c > 0 && atomic_compare_exchange_weak((atomic_int *)&s->count,
                                                   &c, c - 1))
             return;
-        cellar_futex_wait(&s->count, c, 0);
+        airlock_futex_wait(&s->count, c, 0);
     }
 }

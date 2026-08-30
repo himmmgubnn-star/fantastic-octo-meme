@@ -13,15 +13,15 @@
 #include <sys/stat.h>
 #include <unistd.h>
 
-#include "cellar/cellar.h"
-#include "cellar/compat.h"
-#include "cellar/platform.h"
-#include "cellar/prefix.h"
-#include "cellar/shell.h"
+#include "airlock/airlock.h"
+#include "airlock/compat.h"
+#include "airlock/platform.h"
+#include "airlock/prefix.h"
+#include "airlock/shell.h"
 
-void cellar_prefix_path(char *dst, size_t n, const char *root, const char *name)
+void airlock_prefix_path(char *dst, size_t n, const char *root, const char *name)
 {
-    cellar_path_join(dst, n, root ? root : ".", name ? name : "");
+    airlock_path_join(dst, n, root ? root : ".", name ? name : "");
 }
 
 static int valid_name(const char *name)
@@ -32,42 +32,77 @@ static int valid_name(const char *name)
     return 1;
 }
 
-static void read_conf(const char *bottle, cellar_prefix_info_t *out);
+/*
+ * Validate one archive member path before anything is written to disk.
+ *
+ * Rejects absolute paths (POSIX `/...`, UNC `\\host\share`, or `C:\...`) and
+ * any path containing a ".." component, so a hostile or corrupt archive cannot
+ * write outside the prefix directory. A ".." that is merely part of a longer
+ * name (e.g. "save..bak") is a legitimate filename and is accepted.
+ *
+ * Returns 1 when the path is safe to extract under the prefix root.
+ */
+static int archive_member_is_safe(const char *rel)
+{
+    const char *p;
 
-static cellar_status_t write_conf_full(const char *bottle,
-                                       cellar_version_mode_t mode,
+    if (!rel || !*rel)
+        return 0;
+    if (rel[0] == '/' || rel[0] == '\\')
+        return 0; /* POSIX absolute, or UNC \\host\share */
+    if (((rel[0] >= 'A' && rel[0] <= 'Z') || (rel[0] >= 'a' && rel[0] <= 'z')) &&
+        rel[1] == ':')
+        return 0; /* C:\... drive-absolute */
+
+    for (p = rel; *p; ) {
+        const char *sep = strpbrk(p, "/\\");
+        size_t len = sep ? (size_t)(sep - p) : strlen(p);
+
+        if (len == 2 && p[0] == '.' && p[1] == '.')
+            return 0; /* ".." component */
+        if (!sep)
+            break;
+        p = sep + 1;
+    }
+    return 1;
+}
+
+static void read_conf(const char *bottle, airlock_prefix_info_t *out);
+
+static airlock_status_t write_conf_full(const char *bottle,
+                                       airlock_version_mode_t mode,
                                        const char *gfx, const char *audio,
                                        const char *arch, const char *runner)
 {
     char path[640];
     FILE *f;
-    cellar_path_join(path, sizeof path, bottle, "prefix.conf");
+    airlock_path_join(path, sizeof path, bottle, "prefix.conf");
     f = fopen(path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     fprintf(f, "version_mode=%d\n", (int)mode);
     fprintf(f, "gfx=%s\n", gfx ? gfx : "Vulkan");
     fprintf(f, "audio=%s\n", audio ? audio : "ALSA");
     fprintf(f, "arch=%s\n", arch ? arch : "win64");
     fprintf(f, "runner=%s\n", runner ? runner : "stable");
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-static cellar_status_t write_conf(const char *bottle, cellar_version_mode_t mode,
+static airlock_status_t write_conf(const char *bottle, airlock_version_mode_t mode,
                                   const char *gfx, const char *audio)
 {
-    cellar_prefix_info_t info;
+    airlock_prefix_info_t info;
     read_conf(bottle, &info);
     return write_conf_full(bottle, mode, gfx, audio, info.arch, info.runner);
 }
 
-static void read_conf(const char *bottle, cellar_prefix_info_t *out)
+static void read_conf(const char *bottle, airlock_prefix_info_t *out)
 {
     char path[640], buf[1024];
     FILE *f;
     size_t n;
-    cellar_path_join(path, sizeof path, bottle, "prefix.conf");
+    airlock_path_join(path, sizeof path, bottle, "prefix.conf");
     f = fopen(path, "r");
     if (!f)
         return;
@@ -76,7 +111,7 @@ static void read_conf(const char *bottle, cellar_prefix_info_t *out)
     buf[n] = '\0';
     {
         const char *p = strstr(buf, "version_mode=");
-        if (p) out->version_mode = (cellar_version_mode_t)atoi(p + 13);
+        if (p) out->version_mode = (airlock_version_mode_t)atoi(p + 13);
         p = strstr(buf, "gfx=");
         if (p) {
             const char *e = strchr(p + 4, '\n');
@@ -101,7 +136,7 @@ static void read_conf(const char *bottle, cellar_prefix_info_t *out)
             memcpy(out->arch, p + 5, L);
             out->arch[L] = '\0';
         } else {
-            cellar_strlcpy(out->arch, sizeof out->arch, "win64");
+            airlock_strlcpy(out->arch, sizeof out->arch, "win64");
         }
         p = strstr(buf, "runner=");
         if (p) {
@@ -111,44 +146,44 @@ static void read_conf(const char *bottle, cellar_prefix_info_t *out)
             memcpy(out->runner, p + 7, L);
             out->runner[L] = '\0';
         } else {
-            cellar_strlcpy(out->runner, sizeof out->runner, "stable");
+            airlock_strlcpy(out->runner, sizeof out->runner, "stable");
         }
     }
 }
 
-cellar_status_t cellar_prefix_create_arch(const char *root, const char *name,
+airlock_status_t airlock_prefix_create_arch(const char *root, const char *name,
                                           const char *arch)
 {
     char bottle[640];
     const char *a = (arch && (*arch == 'w' || *arch == 'W')) ? arch : "win64";
     if (!root || !valid_name(name))
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_mkdir_p(root);
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
-    if (cellar_mkdir_p(bottle) != 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_shell_init(bottle) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_shell_ensure_dirs() != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_mkdir_p(root);
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
+    if (airlock_mkdir_p(bottle) != 0)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_shell_init(bottle) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_shell_ensure_dirs() != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     {
         char rt[700], un[700];
-        cellar_path_join(rt, sizeof rt, bottle, "runtime");
-        cellar_path_join(un, sizeof un, bottle, "uninstall");
-        cellar_mkdir_p(rt);
-        cellar_mkdir_p(un);
+        airlock_path_join(rt, sizeof rt, bottle, "runtime");
+        airlock_path_join(un, sizeof un, bottle, "uninstall");
+        airlock_mkdir_p(rt);
+        airlock_mkdir_p(un);
     }
     if (strncasecmp(a, "win32", 5) == 0)
         a = "win32";
     else
         a = "win64";
-    return write_conf_full(bottle, CELLAR_WIN_10, "Vulkan", "ALSA", a,
+    return write_conf_full(bottle, AIRLOCK_WIN_10, "Vulkan", "ALSA", a,
                            "stable");
 }
 
-cellar_status_t cellar_prefix_create(const char *root, const char *name)
+airlock_status_t airlock_prefix_create(const char *root, const char *name)
 {
-    return cellar_prefix_create_arch(root, name, "win64");
+    return airlock_prefix_create_arch(root, name, "win64");
 }
 
 static int rm_rf(const char *path)
@@ -175,46 +210,46 @@ static int rm_rf(const char *path)
     return unlink(path);
 }
 
-cellar_status_t cellar_prefix_delete(const char *root, const char *name)
+airlock_status_t airlock_prefix_delete(const char *root, const char *name)
 {
     char bottle[640];
     if (!root || !valid_name(name))
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
     rm_rf(bottle);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_prefix_info(const char *root, const char *name,
-                                   cellar_prefix_info_t *out)
+airlock_status_t airlock_prefix_info(const char *root, const char *name,
+                                   airlock_prefix_info_t *out)
 {
     char bottle[640];
     struct stat st;
     if (!root || !valid_name(name) || !out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(out, 0, sizeof *out);
     snprintf(out->name, sizeof out->name, "%s", name);
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
-    cellar_strlcpy(out->path, sizeof out->path, bottle);
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
+    airlock_strlcpy(out->path, sizeof out->path, bottle);
     out->exists = (stat(bottle, &st) == 0 && S_ISDIR(st.st_mode));
     if (out->exists)
         read_conf(bottle, out);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_prefix_set_config(const char *root, const char *name,
-                                         cellar_version_mode_t mode,
+airlock_status_t airlock_prefix_set_config(const char *root, const char *name,
+                                         airlock_version_mode_t mode,
                                          const char *gfx, const char *audio)
 {
     char bottle[640];
-    cellar_prefix_info_t info;
-    if (cellar_prefix_info(root, name, &info) != CELLAR_OK || !info.exists)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
+    airlock_prefix_info_t info;
+    if (airlock_prefix_info(root, name, &info) != AIRLOCK_OK || !info.exists)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
     return write_conf(bottle, mode, gfx, audio);
 }
 
-size_t cellar_prefix_list(const char *root, cellar_prefix_info_t *out, size_t cap)
+size_t airlock_prefix_list(const char *root, airlock_prefix_info_t *out, size_t cap)
 {
     DIR *d;
     struct dirent *ent;
@@ -235,14 +270,27 @@ size_t cellar_prefix_list(const char *root, cellar_prefix_info_t *out, size_t ca
         snprintf(child, sizeof child, "%s/%s", root, ent->d_name);
         if (stat(child, &st) != 0 || !S_ISDIR(st.st_mode))
             continue;
-        cellar_prefix_info(root, ent->d_name, &out[n]);
+        airlock_prefix_info(root, ent->d_name, &out[n]);
         n++;
     }
     closedir(d);
     return n;
 }
 
-/* ---- backup / restore: "CBK1" stream of (path_len, path, data_len, data)  */
+/* ---- backup / restore ------------------------------------------------------
+ *
+ * Airlock container archive, format "ALK1". A little-endian stream:
+ *
+ *     magic   4 bytes, "ALK1"
+ *     record  u32 path_len | path_len bytes relative path | u32 data_len | data
+ *     end     u32 path_len == 0
+ *
+ * Archives written before the Airlock rebrand used the magic "CBK1" with the
+ * identical record layout. Restore still accepts "CBK1" so backups made by
+ * older builds keep working; every new archive is written as "ALK1".
+ */
+#define AIRLOCK_ARCHIVE_MAGIC    "ALK1"
+#define AIRLOCK_ARCHIVE_MAGIC_V0 "CBK1" /* pre-rebrand, accepted on read only */
 
 static uint32_t wr_u32(FILE *f, uint32_t v)
 {
@@ -296,7 +344,7 @@ static void backup_walk(FILE *out, const char *bottle, const char *rel)
     char abs[1024];
     DIR *d;
     struct dirent *ent;
-    cellar_path_join(abs, sizeof abs, bottle, rel);
+    airlock_path_join(abs, sizeof abs, bottle, rel);
     d = opendir(abs);
     if (!d)
         return;
@@ -309,7 +357,7 @@ static void backup_walk(FILE *out, const char *bottle, const char *rel)
             snprintf(child_rel, sizeof child_rel, "%s/%s", rel, ent->d_name);
         else
             snprintf(child_rel, sizeof child_rel, "%s", ent->d_name);
-        cellar_path_join(child_abs, sizeof child_abs, bottle, child_rel);
+        airlock_path_join(child_abs, sizeof child_abs, bottle, child_rel);
         if (lstat(child_abs, &st) != 0)
             continue;
         if (S_ISDIR(st.st_mode))
@@ -320,40 +368,42 @@ static void backup_walk(FILE *out, const char *bottle, const char *rel)
     closedir(d);
 }
 
-cellar_status_t cellar_prefix_backup(const char *root, const char *name,
+airlock_status_t airlock_prefix_backup(const char *root, const char *name,
                                      const char *archive_path)
 {
     char bottle[640];
     FILE *f;
     if (!root || !valid_name(name) || !archive_path)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
     f = fopen(archive_path, "wb");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    fwrite("CBK1", 1, 4, f);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    fwrite(AIRLOCK_ARCHIVE_MAGIC, 1, 4, f);
     backup_walk(f, bottle, "");
     wr_u32(f, 0); /* terminator */
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_prefix_restore(const char *root, const char *name,
+airlock_status_t airlock_prefix_restore(const char *root, const char *name,
                                       const char *archive_path)
 {
     char bottle[640], magic[4];
     FILE *f;
     if (!root || !valid_name(name) || !archive_path)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     f = fopen(archive_path, "rb");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (fread(magic, 1, 4, f) != 4 || memcmp(magic, "CBK1", 4) != 0) {
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (fread(magic, 1, 4, f) != 4 ||
+        (memcmp(magic, AIRLOCK_ARCHIVE_MAGIC, 4) != 0 &&
+         memcmp(magic, AIRLOCK_ARCHIVE_MAGIC_V0, 4) != 0)) {
         fclose(f);
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
-    cellar_prefix_create(root, name);
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
+    airlock_prefix_create(root, name);
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
     for (;;) {
         uint32_t plen = 0, dlen = 0;
         char rel[512], abs[1024], dir[1024];
@@ -364,37 +414,37 @@ cellar_status_t cellar_prefix_restore(const char *root, const char *name,
             break;
         if (plen >= sizeof rel) {
             fclose(f);
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
         if (fread(rel, 1, plen, f) != plen) {
             fclose(f);
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
         rel[plen] = '\0';
-        if (strstr(rel, "..")) {
+        if (!archive_member_is_safe(rel)) {
             fclose(f);
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
         if (!rd_u32(f, &dlen)) {
             fclose(f);
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
         data = malloc(dlen ? dlen : 1);
         if (!data) {
             fclose(f);
-            return CELLAR_ERR_OUT_OF_MEMORY;
+            return AIRLOCK_ERR_OUT_OF_MEMORY;
         }
         if (dlen && fread(data, 1, dlen, f) != dlen) {
             free(data);
             fclose(f);
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
-        cellar_path_join(abs, sizeof abs, bottle, rel);
+        airlock_path_join(abs, sizeof abs, bottle, rel);
         snprintf(dir, sizeof dir, "%s", abs);
         slash = strrchr(dir, '/');
         if (slash) {
             *slash = '\0';
-            cellar_mkdir_p(dir);
+            airlock_mkdir_p(dir);
         }
         out = fopen(abs, "wb");
         if (out) {
@@ -405,62 +455,62 @@ cellar_status_t cellar_prefix_restore(const char *root, const char *name,
         free(data);
     }
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_prefix_export(const char *root, const char *name,
+airlock_status_t airlock_prefix_export(const char *root, const char *name,
                                      const char *archive_path)
 {
-    return cellar_prefix_backup(root, name, archive_path);
+    return airlock_prefix_backup(root, name, archive_path);
 }
 
-cellar_status_t cellar_prefix_import(const char *root, const char *name,
+airlock_status_t airlock_prefix_import(const char *root, const char *name,
                                      const char *archive_path)
 {
-    return cellar_prefix_restore(root, name, archive_path);
+    return airlock_prefix_restore(root, name, archive_path);
 }
 
-cellar_status_t cellar_prefix_clone(const char *root, const char *src,
+airlock_status_t airlock_prefix_clone(const char *root, const char *src,
                                     const char *dst)
 {
     char tmp[700];
-    cellar_prefix_info_t info;
-    cellar_status_t st;
+    airlock_prefix_info_t info;
+    airlock_status_t st;
     if (!root || !valid_name(src) || !valid_name(dst))
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_prefix_info(root, src, &info) != CELLAR_OK || !info.exists)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_prefix_info(root, src, &info) != AIRLOCK_OK || !info.exists)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     snprintf(tmp, sizeof tmp, "%s/.clone-%s-%u.cbk", root, src,
-             (unsigned)cellar_getpid());
-    st = cellar_prefix_backup(root, src, tmp);
-    if (st != CELLAR_OK)
+             (unsigned)airlock_getpid());
+    st = airlock_prefix_backup(root, src, tmp);
+    if (st != AIRLOCK_OK)
         return st;
-    st = cellar_prefix_restore(root, dst, tmp);
+    st = airlock_prefix_restore(root, dst, tmp);
     unlink(tmp);
     return st;
 }
 
 /* ---- generic key=value settings on prefix.conf ------------------------- */
 
-cellar_status_t cellar_prefix_get_setting(const char *root, const char *name,
+airlock_status_t airlock_prefix_get_setting(const char *root, const char *name,
                                           const char *key,
                                           char *out, size_t cap)
 {
-    cellar_prefix_info_t info;
+    airlock_prefix_info_t info;
     char bottle[640], path[640], buf[2048];
     FILE *f;
     size_t n;
     const char *p, *nl;
     size_t kl;
     if (!key || !out || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_prefix_info(root, name, &info) != CELLAR_OK || !info.exists)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
-    cellar_path_join(path, sizeof path, bottle, "prefix.conf");
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_prefix_info(root, name, &info) != AIRLOCK_OK || !info.exists)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
+    airlock_path_join(path, sizeof path, bottle, "prefix.conf");
     f = fopen(path, "r");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     n = fread(buf, 1, sizeof buf - 1, f);
     fclose(f);
     buf[n] = '\0';
@@ -474,33 +524,33 @@ cellar_status_t cellar_prefix_get_setting(const char *root, const char *name,
             if (vl >= cap) vl = cap - 1;
             memcpy(out, v, vl);
             out[vl] = '\0';
-            return CELLAR_OK;
+            return AIRLOCK_OK;
         }
         if (!nl)
             break;
         p = nl + 1;
     }
     out[0] = '\0';
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_prefix_set_setting(const char *root, const char *name,
+airlock_status_t airlock_prefix_set_setting(const char *root, const char *name,
                                           const char *key, const char *value)
 {
-    cellar_prefix_info_t info;
+    airlock_prefix_info_t info;
     char bottle[640], path[640], buf[4096], nline[520];
     FILE *f;
     size_t n, kl;
     int found = 0;
     if (!key || !*key || !value)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_prefix_info(root, name, &info) != CELLAR_OK || !info.exists)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_prefix_path(bottle, sizeof bottle, root, name);
-    cellar_path_join(path, sizeof path, bottle, "prefix.conf");
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_prefix_info(root, name, &info) != AIRLOCK_OK || !info.exists)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_prefix_path(bottle, sizeof bottle, root, name);
+    airlock_path_join(path, sizeof path, bottle, "prefix.conf");
     f = fopen(path, "r");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     n = fread(buf, 1, sizeof buf - 1, f);
     fclose(f);
     buf[n] = '\0';
@@ -508,7 +558,7 @@ cellar_status_t cellar_prefix_set_setting(const char *root, const char *name,
     snprintf(nline, sizeof nline, "%s=%s\n", key, value);
     f = fopen(path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     /* Rebuild the file line by line, replacing the target key. */
     {
         char *p = buf, *nl;
@@ -530,5 +580,5 @@ cellar_status_t cellar_prefix_set_setting(const char *root, const char *name,
     if (!found)
         fputs(nline, f);
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }

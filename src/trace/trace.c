@@ -10,35 +10,35 @@
 #include <string.h>
 #include <strings.h>
 
-#include "cellar/cellar.h"
-#include "cellar/trace.h"
+#include "airlock/airlock.h"
+#include "airlock/trace.h"
 
 static uint64_t g_mask = 0;
 
-uint64_t cellar_trace_enabled_mask(void) { return g_mask; }
+uint64_t airlock_trace_enabled_mask(void) { return g_mask; }
 
-int cellar_trace_enabled(cellar_trace_category_t cat)
+int airlock_trace_enabled(airlock_trace_category_t cat)
 {
     return (g_mask & (uint64_t)cat) != 0;
 }
 
-void cellar_trace_enable(uint64_t cats)  { g_mask |= cats; }
-void cellar_trace_disable(uint64_t cats) { g_mask &= ~cats; }
+void airlock_trace_enable(uint64_t cats)  { g_mask |= cats; }
+void airlock_trace_disable(uint64_t cats) { g_mask &= ~cats; }
 
 static const struct { const char *name; uint64_t bit; } k_names[] = {
-    { "graphics",   CELLAR_TRACE_GRAPHICS },
-    { "filesystem", CELLAR_TRACE_FILESYSTEM },
-    { "threading",  CELLAR_TRACE_THREADING },
-    { "dll",        CELLAR_TRACE_DLL },
-    { "api",        CELLAR_TRACE_API },
-    { "audio",      CELLAR_TRACE_AUDIO },
-    { "timer",      CELLAR_TRACE_TIMER },
-    { "compat",     CELLAR_TRACE_COMPAT },
-    { "all",        CELLAR_TRACE_ALL },
+    { "graphics",   AIRLOCK_TRACE_GRAPHICS },
+    { "filesystem", AIRLOCK_TRACE_FILESYSTEM },
+    { "threading",  AIRLOCK_TRACE_THREADING },
+    { "dll",        AIRLOCK_TRACE_DLL },
+    { "api",        AIRLOCK_TRACE_API },
+    { "audio",      AIRLOCK_TRACE_AUDIO },
+    { "timer",      AIRLOCK_TRACE_TIMER },
+    { "compat",     AIRLOCK_TRACE_COMPAT },
+    { "all",        AIRLOCK_TRACE_ALL },
     { NULL, 0 },
 };
 
-static const char *category_name(cellar_trace_category_t cat)
+static const char *category_name(airlock_trace_category_t cat)
 {
     size_t i;
     for (i = 0; k_names[i].name; i++)
@@ -47,7 +47,7 @@ static const char *category_name(cellar_trace_category_t cat)
     return "?";
 }
 
-uint64_t cellar_trace_parse(const char *names)
+uint64_t airlock_trace_parse(const char *names)
 {
     uint64_t mask = 0;
     char buf[512];
@@ -67,14 +67,14 @@ uint64_t cellar_trace_parse(const char *names)
     return mask;
 }
 
-void cellar_trace_init_from_env(void)
+void airlock_trace_init_from_env(void)
 {
-    const char *env = getenv("CELLAR_TRACE");
+    const char *env = getenv("AIRLOCK_TRACE");
     if (env && *env)
-        g_mask |= cellar_trace_parse(env);
+        g_mask |= airlock_trace_parse(env);
 }
 
-void cellar_trace(cellar_trace_category_t cat, const char *fmt, ...)
+void airlock_trace(airlock_trace_category_t cat, const char *fmt, ...)
 {
     char line[512];
     va_list ap;

@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/compat.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/compat.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -29,7 +29,7 @@ typedef struct osversioninfoa {
     char  szCSDVersion[128];
 } osversioninfoa_t;
 
-static DWORD WINAPI cellar_GetFileVersionInfoSizeA(const char *path, DWORD *handle)
+static DWORD WINAPI airlock_GetFileVersionInfoSizeA(const char *path, DWORD *handle)
 {
     UNUSED(path);
     if (handle)
@@ -37,16 +37,16 @@ static DWORD WINAPI cellar_GetFileVersionInfoSizeA(const char *path, DWORD *hand
     return 0; /* no version resource in this milestone */
 }
 
-static BOOL WINAPI cellar_GetFileVersionInfoA(const char *path, DWORD handle,
+static BOOL WINAPI airlock_GetFileVersionInfoA(const char *path, DWORD handle,
                                               DWORD len, void *data)
 {
     UNUSED(path); UNUSED(handle); UNUSED(len); UNUSED(data);
     return 0;
 }
 
-static BOOL WINAPI cellar_GetVersionExA(osversioninfoa_t *vi)
+static BOOL WINAPI airlock_GetVersionExA(osversioninfoa_t *vi)
 {
-    const cellar_version_profile_t *p = cellar_version_profile(CELLAR_WIN_10);
+    const airlock_version_profile_t *p = airlock_version_profile(AIRLOCK_WIN_10);
     if (!vi || vi->dwOSVersionInfoSize < 20)
         return 0;
     vi->dwMajorVersion = p->major;
@@ -57,14 +57,14 @@ static BOOL WINAPI cellar_GetVersionExA(osversioninfoa_t *vi)
     return 1;
 }
 
-static const cellar_export_entry_t k_exports[] = {
-    { "GetFileVersionInfoSizeA", (void *)&cellar_GetFileVersionInfoSizeA },
-    { "GetFileVersionInfoA",     (void *)&cellar_GetFileVersionInfoA },
-    { "GetVersionExA",           (void *)&cellar_GetVersionExA },
+static const airlock_export_entry_t k_exports[] = {
+    { "GetFileVersionInfoSizeA", (void *)&airlock_GetFileVersionInfoSizeA },
+    { "GetFileVersionInfoA",     (void *)&airlock_GetFileVersionInfoA },
+    { "GetVersionExA",           (void *)&airlock_GetVersionExA },
 };
 
-static const cellar_module_t k_mod = {
+static const airlock_module_t k_mod = {
     "version.dll", k_exports, sizeof k_exports / sizeof k_exports[0]
 };
 
-const cellar_module_t *cellar_win32_module_version(void) { return &k_mod; }
+const airlock_module_t *airlock_win32_module_version(void) { return &k_mod; }

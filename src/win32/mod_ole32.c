@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/com.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/com.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -23,39 +23,39 @@ typedef unsigned long DWORD;
 #define E_FAIL 0x80004005
 #define COINIT_APARTMENTTHREADED 0x2u
 
-static HRESULT WINAPI cellar_CoInitializeEx(void *reserved, DWORD coinit)
+static HRESULT WINAPI airlock_CoInitializeEx(void *reserved, DWORD coinit)
 {
     UNUSED(reserved);
-    cellar_com_register_builtins();
-    return cellar_com_init((coinit & COINIT_APARTMENTTHREADED)
-                               ? CELLAR_APT_STA : CELLAR_APT_MTA) == CELLAR_OK
+    airlock_com_register_builtins();
+    return airlock_com_init((coinit & COINIT_APARTMENTTHREADED)
+                               ? AIRLOCK_APT_STA : AIRLOCK_APT_MTA) == AIRLOCK_OK
                ? S_OK : E_FAIL;
 }
 
-static void WINAPI cellar_CoUninitialize(void)
+static void WINAPI airlock_CoUninitialize(void)
 {
-    cellar_com_uninit();
+    airlock_com_uninit();
 }
 
-static HRESULT WINAPI cellar_CoCreateInstance(const cellar_guid_t *clsid,
+static HRESULT WINAPI airlock_CoCreateInstance(const airlock_guid_t *clsid,
                                               void *outer, DWORD ctx,
-                                              const cellar_guid_t *iid,
+                                              const airlock_guid_t *iid,
                                               void **out)
 {
     UNUSED(outer); UNUSED(ctx);
-    if (!cellar_com_inited())
-        cellar_CoInitializeEx(NULL, 0);
-    return cellar_com_create(clsid, iid, out) == CELLAR_OK ? S_OK : E_FAIL;
+    if (!airlock_com_inited())
+        airlock_CoInitializeEx(NULL, 0);
+    return airlock_com_create(clsid, iid, out) == AIRLOCK_OK ? S_OK : E_FAIL;
 }
 
-static const cellar_export_entry_t k_exports[] = {
-    { "CoInitializeEx",   (void *)&cellar_CoInitializeEx },
-    { "CoUninitialize",   (void *)&cellar_CoUninitialize },
-    { "CoCreateInstance", (void *)&cellar_CoCreateInstance },
+static const airlock_export_entry_t k_exports[] = {
+    { "CoInitializeEx",   (void *)&airlock_CoInitializeEx },
+    { "CoUninitialize",   (void *)&airlock_CoUninitialize },
+    { "CoCreateInstance", (void *)&airlock_CoCreateInstance },
 };
 
-static const cellar_module_t k_mod = {
+static const airlock_module_t k_mod = {
     "ole32.dll", k_exports, sizeof k_exports / sizeof k_exports[0]
 };
 
-const cellar_module_t *cellar_win32_module_ole32(void) { return &k_mod; }
+const airlock_module_t *airlock_win32_module_ole32(void) { return &k_mod; }

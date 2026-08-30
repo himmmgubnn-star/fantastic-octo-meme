@@ -2,8 +2,8 @@
  * mod_winmm.c — WINMM.dll (Windows Multimedia) implementation.
  *
  * WINMM is the multimedia DLL games have used for decades — waveOut* for
- * audio output and timeGetTime for timing. Cellar routes waveOut through the
- * audio backend (see <cellar/audio.h>), so a game's audio can go to a WAV
+ * audio output and timeGetTime for timing. Airlock routes waveOut through the
+ * audio backend (see <airlock/audio.h>), so a game's audio can go to a WAV
  * file sink (default), ALSA, or a null sink without the Win32 layer knowing
  * anything about the hardware.
  *
@@ -13,12 +13,12 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/audio.h"
-#include "cellar/crash.h"
-#include "cellar/perf.h"
-#include "cellar/platform.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/audio.h"
+#include "airlock/crash.h"
+#include "airlock/perf.h"
+#include "airlock/platform.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -94,39 +94,39 @@ typedef struct WAVEOUTCAPS {
 
 /* ---- Device table --------------------------------------------------------- */
 
-#define CELLAR_MAX_AUDIO_DEVICES 8
+#define AIRLOCK_MAX_AUDIO_DEVICES 8
 
-typedef struct cellar_mm_device {
-    cellar_audio_device_t audio;
-    cellar_audio_format_t fmt;
+typedef struct airlock_mm_device {
+    airlock_audio_device_t audio;
+    airlock_audio_format_t fmt;
     int  open;
-} cellar_mm_device_t;
+} airlock_mm_device_t;
 
-static cellar_mm_device_t g_devices[CELLAR_MAX_AUDIO_DEVICES];
+static airlock_mm_device_t g_devices[AIRLOCK_MAX_AUDIO_DEVICES];
 
 #define MMDEV_INVALID ((void *)(uintptr_t)-1)
 
-static cellar_mm_device_t *dev_from_handle(HWAVEOUT h)
+static airlock_mm_device_t *dev_from_handle(HWAVEOUT h)
 {
     uintptr_t idx = (uintptr_t)h;
-    if (idx == 0 || idx > CELLAR_MAX_AUDIO_DEVICES)
+    if (idx == 0 || idx > AIRLOCK_MAX_AUDIO_DEVICES)
         return NULL;
     return &g_devices[idx - 1];
 }
 
-static HWAVEOUT dev_to_handle(const cellar_mm_device_t *d)
+static HWAVEOUT dev_to_handle(const airlock_mm_device_t *d)
 {
     return (HWAVEOUT)(uintptr_t)(d - g_devices + 1);
 }
 
 /* ---- Implementations ------------------------------------------------------ */
 
-static UINT WINAPI cellar_waveOutGetNumDevs(void)
+static UINT WINAPI airlock_waveOutGetNumDevs(void)
 {
     return 1; /* one logical device backed by the default audio backend */
 }
 
-static UINT WINAPI cellar_waveOutGetDevCaps(UINT uDeviceID, void *caps,
+static UINT WINAPI airlock_waveOutGetDevCaps(UINT uDeviceID, void *caps,
                                             UINT cbCaps)
 {
     WAVEOUTCAPS *c = caps;
@@ -135,17 +135,17 @@ static UINT WINAPI cellar_waveOutGetDevCaps(UINT uDeviceID, void *caps,
     memset(c, 0, sizeof *c);
     c->wMid = (UINT16)0xFFFE;
     c->wChannels = (UINT16)2;
-    snprintf(c->szPname, sizeof c->szPname, "Cellar Audio (default)");
+    snprintf(c->szPname, sizeof c->szPname, "Airlock Audio (default)");
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutOpen(HWAVEOUT *phwo, UINT uDeviceID,
+static UINT WINAPI airlock_waveOutOpen(HWAVEOUT *phwo, UINT uDeviceID,
                                       const WAVEFORMATEX *pwfx,
                                       void *dwCallback, DWORD dwInstance,
                                       DWORD fdwOpen)
 {
-    cellar_mm_device_t *d;
-    const cellar_audio_backend_t *backend;
+    airlock_mm_device_t *d;
+    const airlock_audio_backend_t *backend;
     UINT i;
     (void)dwCallback; (void)dwInstance;
 
@@ -160,7 +160,7 @@ static UINT WINAPI cellar_waveOutOpen(HWAVEOUT *phwo, UINT uDeviceID,
 
     /* find a free device slot */
     d = NULL;
-    for (i = 0; i < CELLAR_MAX_AUDIO_DEVICES; i++) {
+    for (i = 0; i < AIRLOCK_MAX_AUDIO_DEVICES; i++) {
         if (!g_devices[i].open) { d = &g_devices[i]; break; }
     }
     if (!d)
@@ -173,33 +173,33 @@ static UINT WINAPI cellar_waveOutOpen(HWAVEOUT *phwo, UINT uDeviceID,
     d->fmt.block_align = pwfx->nBlockAlign;
     d->fmt.avg_bytes_per_sec = (uint32_t)pwfx->nAvgBytesPerSec;
 
-    backend = cellar_audio_default_backend();
-    if (cellar_audio_open(&d->audio, backend, &d->fmt) != CELLAR_OK)
+    backend = airlock_audio_default_backend();
+    if (airlock_audio_open(&d->audio, backend, &d->fmt) != AIRLOCK_OK)
         return MMSYSERR_NODRIVER;
 
     d->open = 1;
     *phwo = dev_to_handle(d);
-    CELLAR_LOG_INFO("WINMM.waveOutOpen: %lu Hz, %u ch, %u-bit -> %s",
+    AIRLOCK_LOG_INFO("WINMM.waveOutOpen: %lu Hz, %u ch, %u-bit -> %s",
                     (unsigned long)pwfx->nSamplesPerSec, pwfx->nChannels,
                     pwfx->wBitsPerSample, backend->name);
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutClose(HWAVEOUT hwo)
+static UINT WINAPI airlock_waveOutClose(HWAVEOUT hwo)
 {
-    cellar_mm_device_t *d = dev_from_handle(hwo);
+    airlock_mm_device_t *d = dev_from_handle(hwo);
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
-    cellar_audio_close(&d->audio);
+    airlock_audio_close(&d->audio);
     memset(&d->audio, 0, sizeof d->audio);
     d->open = 0;
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutPrepareHeader(HWAVEOUT hwo, WAVEHDR *pwh,
+static UINT WINAPI airlock_waveOutPrepareHeader(HWAVEOUT hwo, WAVEHDR *pwh,
                                                UINT cbwh)
 {
-    cellar_mm_device_t *d = dev_from_handle(hwo);
+    airlock_mm_device_t *d = dev_from_handle(hwo);
     (void)cbwh;
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
@@ -209,10 +209,10 @@ static UINT WINAPI cellar_waveOutPrepareHeader(HWAVEOUT hwo, WAVEHDR *pwh,
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutUnprepareHeader(HWAVEOUT hwo, WAVEHDR *pwh,
+static UINT WINAPI airlock_waveOutUnprepareHeader(HWAVEOUT hwo, WAVEHDR *pwh,
                                                  UINT cbwh)
 {
-    cellar_mm_device_t *d = dev_from_handle(hwo);
+    airlock_mm_device_t *d = dev_from_handle(hwo);
     (void)cbwh;
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
@@ -221,43 +221,43 @@ static UINT WINAPI cellar_waveOutUnprepareHeader(HWAVEOUT hwo, WAVEHDR *pwh,
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutWrite(HWAVEOUT hwo, WAVEHDR *pwh, UINT cbwh)
+static UINT WINAPI airlock_waveOutWrite(HWAVEOUT hwo, WAVEHDR *pwh, UINT cbwh)
 {
-    cellar_mm_device_t *d = dev_from_handle(hwo);
+    airlock_mm_device_t *d = dev_from_handle(hwo);
     (void)cbwh;
-    cellar_crash_set_current_api("audio", "winmm!waveOutWrite");
+    airlock_crash_set_current_api("audio", "winmm!waveOutWrite");
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
     if (!pwh || !pwh->lpData || pwh->dwBufferLength == 0)
         return MMSYSERR_ERROR;
 
-    if (cellar_audio_write(&d->audio, pwh->lpData,
-                           (uint32_t)pwh->dwBufferLength) != CELLAR_OK)
+    if (airlock_audio_write(&d->audio, pwh->lpData,
+                           (uint32_t)pwh->dwBufferLength) != AIRLOCK_OK)
         return MMSYSERR_ERROR;
 
-    cellar_perf_count_audio((uint64_t)pwh->dwBufferLength);
+    airlock_perf_count_audio((uint64_t)pwh->dwBufferLength);
     pwh->dwFlags |= WHDR_DONE;
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutReset(HWAVEOUT hwo)
+static UINT WINAPI airlock_waveOutReset(HWAVEOUT hwo)
 {
-    cellar_mm_device_t *d = dev_from_handle(hwo);
+    airlock_mm_device_t *d = dev_from_handle(hwo);
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
-    cellar_audio_reset(&d->audio);
+    airlock_audio_reset(&d->audio);
     return MMSYSERR_NOERROR;
 }
 
-static UINT WINAPI cellar_waveOutGetPosition(HWAVEOUT hwo, void *lpmmt,
+static UINT WINAPI airlock_waveOutGetPosition(HWAVEOUT hwo, void *lpmmt,
                                              UINT cbmmt)
 {
-    cellar_mm_device_t *d = dev_from_handle(hwo);
+    airlock_mm_device_t *d = dev_from_handle(hwo);
     uint64_t pos;
     (void)cbmmt;
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
-    pos = cellar_audio_position_ms(&d->audio);
+    pos = airlock_audio_position_ms(&d->audio);
     if (cbmmt >= 8) {
         uint32_t *mm = lpmmt;
         mm[0] = 0;              /* TIME_MS */
@@ -266,55 +266,55 @@ static UINT WINAPI cellar_waveOutGetPosition(HWAVEOUT hwo, void *lpmmt,
     return MMSYSERR_NOERROR;
 }
 
-static int WINAPI cellar_PlaySoundA(const char *pszSound, HMODULE hmod,
+static int WINAPI airlock_PlaySoundA(const char *pszSound, HMODULE hmod,
                                     DWORD fdwSound)
 {
     (void)pszSound; (void)hmod; (void)fdwSound;
-    CELLAR_LOG_INFO("WINMM.PlaySoundA(\"%s\") — stub",
+    AIRLOCK_LOG_INFO("WINMM.PlaySoundA(\"%s\") — stub",
                     pszSound ? pszSound : "(null)");
     return 1; /* TRUE */
 }
 
-static DWORD WINAPI cellar_timeGetTime(void)
+static DWORD WINAPI airlock_timeGetTime(void)
 {
-    return (DWORD)cellar_monotonic_ms();
+    return (DWORD)airlock_monotonic_ms();
 }
 
-static void WINAPI cellar_timeBeginPeriod(UINT uPeriod)
+static void WINAPI airlock_timeBeginPeriod(UINT uPeriod)
 {
     (void)uPeriod; /* timing resolution is best-effort on POSIX */
 }
 
-static void WINAPI cellar_timeEndPeriod(UINT uPeriod)
+static void WINAPI airlock_timeEndPeriod(UINT uPeriod)
 {
     (void)uPeriod;
 }
 
 /* ---- Registered export table --------------------------------------------- */
 
-static const cellar_export_entry_t k_winmm_exports[] = {
-    { "waveOutGetNumDevs",     (void *)&cellar_waveOutGetNumDevs },
-    { "waveOutGetDevCaps",     (void *)&cellar_waveOutGetDevCaps },
-    { "waveOutOpen",           (void *)&cellar_waveOutOpen },
-    { "waveOutClose",          (void *)&cellar_waveOutClose },
-    { "waveOutPrepareHeader",  (void *)&cellar_waveOutPrepareHeader },
-    { "waveOutUnprepareHeader",(void *)&cellar_waveOutUnprepareHeader },
-    { "waveOutWrite",          (void *)&cellar_waveOutWrite },
-    { "waveOutReset",          (void *)&cellar_waveOutReset },
-    { "waveOutGetPosition",    (void *)&cellar_waveOutGetPosition },
-    { "PlaySoundA",            (void *)&cellar_PlaySoundA },
-    { "timeGetTime",           (void *)&cellar_timeGetTime },
-    { "timeBeginPeriod",       (void *)&cellar_timeBeginPeriod },
-    { "timeEndPeriod",         (void *)&cellar_timeEndPeriod },
+static const airlock_export_entry_t k_winmm_exports[] = {
+    { "waveOutGetNumDevs",     (void *)&airlock_waveOutGetNumDevs },
+    { "waveOutGetDevCaps",     (void *)&airlock_waveOutGetDevCaps },
+    { "waveOutOpen",           (void *)&airlock_waveOutOpen },
+    { "waveOutClose",          (void *)&airlock_waveOutClose },
+    { "waveOutPrepareHeader",  (void *)&airlock_waveOutPrepareHeader },
+    { "waveOutUnprepareHeader",(void *)&airlock_waveOutUnprepareHeader },
+    { "waveOutWrite",          (void *)&airlock_waveOutWrite },
+    { "waveOutReset",          (void *)&airlock_waveOutReset },
+    { "waveOutGetPosition",    (void *)&airlock_waveOutGetPosition },
+    { "PlaySoundA",            (void *)&airlock_PlaySoundA },
+    { "timeGetTime",           (void *)&airlock_timeGetTime },
+    { "timeBeginPeriod",       (void *)&airlock_timeBeginPeriod },
+    { "timeEndPeriod",         (void *)&airlock_timeEndPeriod },
 };
 
-static const cellar_module_t k_winmm_module = {
+static const airlock_module_t k_winmm_module = {
     "WINMM.dll",
     k_winmm_exports,
     sizeof k_winmm_exports / sizeof k_winmm_exports[0],
 };
 
-const cellar_module_t *cellar_win32_module_winmm(void)
+const airlock_module_t *airlock_win32_module_winmm(void)
 {
     return &k_winmm_module;
 }

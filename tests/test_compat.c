@@ -9,12 +9,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/compat.h"
-#include "cellar/crash.h"
-#include "cellar/loader.h"
-#include "cellar/plugin.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/compat.h"
+#include "airlock/crash.h"
+#include "airlock/loader.h"
+#include "airlock/plugin.h"
+#include "airlock/win32.h"
 
 static int g_failures = 0;
 #define CHECK(cond, msg) \
@@ -81,33 +81,33 @@ static int build_pe(pebuf_t *b, const char *m1, const char *f1,
 static void test_analysis(void)
 {
     pebuf_t pe;
-    cellar_image_t img;
-    cellar_analysis_t a;
-    cellar_status_t st;
+    airlock_image_t img;
+    airlock_analysis_t a;
+    airlock_status_t st;
 
     CHECK(build_pe(&pe, "KERNEL32.dll", "ExitProcess",
                    "USER32.dll", "MessageBoxA"), "build pe");
 
-    st = cellar_image_load_buffer(pe.p, pe.n, CELLAR_LOAD_DEFAULT, &img);
-    CHECK(st == CELLAR_OK, "load buffer");
-    if (st != CELLAR_OK) { free(pe.p); return; }
+    st = airlock_image_load_buffer(pe.p, pe.n, AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_OK, "load buffer");
+    if (st != AIRLOCK_OK) { free(pe.p); return; }
 
-    st = cellar_compat_analyze(&img, "game.exe", &a);
-    CHECK(st == CELLAR_OK, "analyze ok");
+    st = airlock_compat_analyze(&img, "game.exe", &a);
+    CHECK(st == AIRLOCK_OK, "analyze ok");
     CHECK(a.is_64bit == 0, "x86 detected");
     CHECK(a.missing_count == 0, "USER32.MessageBoxA is implemented");
-    CHECK(a.scores[CELLAR_CAT_SYSTEM].total_imports == 2,
+    CHECK(a.scores[AIRLOCK_CAT_SYSTEM].total_imports == 2,
           "both imports classified into Windows-API category");
-    CHECK(a.scores[CELLAR_CAT_SYSTEM].supported_imports == 2,
+    CHECK(a.scores[AIRLOCK_CAT_SYSTEM].supported_imports == 2,
           "ExitProcess and MessageBoxA both supported");
-    CHECK(a.scores[CELLAR_CAT_SYSTEM].percent == 100,
+    CHECK(a.scores[AIRLOCK_CAT_SYSTEM].percent == 100,
           "Windows-API coverage 100%");
     CHECK(a.overall_percent == 100, "overall 100%");
 
     /* Report renderer must not crash and must mention the exe. */
-    cellar_compat_report(&a);
+    airlock_compat_report(&a);
 
-    cellar_image_unload(&img);
+    airlock_image_unload(&img);
     free(pe.p);
 }
 
@@ -115,8 +115,8 @@ static void test_analysis(void)
 
 static void test_version_profiles(void)
 {
-    const cellar_version_profile_t *w7 = cellar_version_profile(CELLAR_WIN_7);
-    const cellar_version_profile_t *w11 = cellar_version_profile(CELLAR_WIN_11);
+    const airlock_version_profile_t *w7 = airlock_version_profile(AIRLOCK_WIN_7);
+    const airlock_version_profile_t *w11 = airlock_version_profile(AIRLOCK_WIN_11);
 
     CHECK(w7 != NULL && w11 != NULL, "profiles exist");
     CHECK(w7->major == 6 && w7->minor == 1, "Win7 is 6.1");
@@ -136,14 +136,14 @@ static void test_version_profiles(void)
 
 static void test_app_profiles(void)
 {
-    cellar_app_profile_t p, back;
-    cellar_status_t st;
+    airlock_app_profile_t p, back;
+    airlock_status_t st;
     char dir[512];
-    snprintf(dir, sizeof dir, "%s/cellar-test-prefix", getenv("HOME")?getenv("HOME"):".");
+    snprintf(dir, sizeof dir, "%s/airlock-test-prefix", getenv("HOME")?getenv("HOME"):".");
 
     memset(&p, 0, sizeof p);
     snprintf(p.app_name, sizeof p.app_name, "game.exe");
-    p.version_mode = CELLAR_WIN_10;
+    p.version_mode = AIRLOCK_WIN_10;
     snprintf(p.gfx_backend, sizeof p.gfx_backend, "Vulkan");
     snprintf(p.audio_backend, sizeof p.audio_backend, "ALSA");
     snprintf(p.dll_overrides, sizeof p.dll_overrides, "d3d9=native");
@@ -151,20 +151,20 @@ static void test_app_profiles(void)
     p.shader_cache_enabled = 1;
     p.last_good = 0;
 
-    st = cellar_profile_save(dir, &p);
-    CHECK(st == CELLAR_OK, "profile saved");
-    st = cellar_profile_load(dir, "game.exe", &back);
-    CHECK(st == CELLAR_OK, "profile loaded");
+    st = airlock_profile_save(dir, &p);
+    CHECK(st == AIRLOCK_OK, "profile saved");
+    st = airlock_profile_load(dir, "game.exe", &back);
+    CHECK(st == AIRLOCK_OK, "profile loaded");
     CHECK(strcmp(back.gfx_backend, "Vulkan") == 0, "gfx backend remembered");
     CHECK(strcmp(back.audio_backend, "ALSA") == 0, "audio backend remembered");
-    CHECK(back.version_mode == CELLAR_WIN_10, "version mode remembered");
+    CHECK(back.version_mode == AIRLOCK_WIN_10, "version mode remembered");
     CHECK(back.low_latency_sync == 1, "sync setting remembered");
     CHECK(back.shader_cache_enabled == 1, "shader cache remembered");
 
     /* Remember a working configuration. */
-    st = cellar_profile_mark_last_good(dir, &p);
-    CHECK(st == CELLAR_OK, "mark last-good saved");
-    st = cellar_profile_load(dir, "game.exe", &back);
+    st = airlock_profile_mark_last_good(dir, &p);
+    CHECK(st == AIRLOCK_OK, "mark last-good saved");
+    st = airlock_profile_load(dir, "game.exe", &back);
     CHECK(back.last_good == 1, "last-good flag persisted");
 }
 
@@ -172,11 +172,11 @@ static void test_app_profiles(void)
 
 static void test_crash(void)
 {
-    cellar_crash_info_t ci;
+    airlock_crash_info_t ci;
     char buf[1024];
-    cellar_crash_set_current_api("audio", "winmm!waveOutWrite");
-    cellar_crash_fill(&ci, 11, (uintptr_t)0x1234);
-    cellar_crash_format(&ci, buf, sizeof buf);
+    airlock_crash_set_current_api("audio", "winmm!waveOutWrite");
+    airlock_crash_fill(&ci, 11, (uintptr_t)0x1234);
+    airlock_crash_format(&ci, buf, sizeof buf);
     CHECK(strstr(buf, "EXCEPTION") != NULL, "crash report has EXCEPTION");
     CHECK(strstr(buf, "winmm!waveOutWrite") != NULL, "crash report has API call");
     CHECK(ci.thread_id != 0, "crash report has thread id");
@@ -186,20 +186,20 @@ static void test_crash(void)
 
 static void test_backends(void)
 {
-    cellar_backend_init();
-    CHECK(strcmp(cellar_backend_pick(CELLAR_BACKEND_GRAPHICS), "Vulkan") == 0,
+    airlock_backend_init();
+    CHECK(strcmp(airlock_backend_pick(AIRLOCK_BACKEND_GRAPHICS), "Vulkan") == 0,
           "graphics picks Vulkan first");
-    cellar_backend_set_available("Vulkan", 0);
-    CHECK(strcmp(cellar_backend_pick(CELLAR_BACKEND_GRAPHICS), "OpenGL") == 0,
+    airlock_backend_set_available("Vulkan", 0);
+    CHECK(strcmp(airlock_backend_pick(AIRLOCK_BACKEND_GRAPHICS), "OpenGL") == 0,
           "falls back to OpenGL");
-    cellar_backend_set_available("OpenGL", 0);
-    CHECK(strcmp(cellar_backend_pick(CELLAR_BACKEND_GRAPHICS), "Software") == 0,
+    airlock_backend_set_available("OpenGL", 0);
+    CHECK(strcmp(airlock_backend_pick(AIRLOCK_BACKEND_GRAPHICS), "Software") == 0,
           "emergency fallback Software");
 }
 
 int main(void)
 {
-    cellar_win32_init();
+    airlock_win32_init();
     test_analysis();
     test_version_profiles();
     test_app_profiles();

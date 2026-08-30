@@ -3,7 +3,7 @@
  *
  * Uses CLOCK_MONOTONIC at nanosecond resolution via clock_gettime. Sleeps use
  * nanosleep (absolute via clock_nanosleep where available) so they remain
- * precise without busy-waiting; cellar_timer_spin_until provides an explicit
+ * precise without busy-waiting; airlock_timer_spin_until provides an explicit
  * busy-wait for latency-critical, short windows.
  *
  * SPDX-License-Identifier: MIT
@@ -12,16 +12,16 @@
 #include <string.h>
 #include <time.h>
 
-#include "cellar/cellar.h"
-#include "cellar/timer.h"
-#include "cellar/trace.h"
+#include "airlock/airlock.h"
+#include "airlock/timer.h"
+#include "airlock/trace.h"
 
-uint64_t cellar_timer_frequency(void)
+uint64_t airlock_timer_frequency(void)
 {
     return 1000000000ull; /* nanoseconds per second */
 }
 
-uint64_t cellar_timer_ns(void)
+uint64_t airlock_timer_ns(void)
 {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
@@ -29,33 +29,33 @@ uint64_t cellar_timer_ns(void)
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
-uint64_t cellar_timer_us(void) { return cellar_timer_ns() / 1000u; }
-uint64_t cellar_timer_ms(void) { return cellar_timer_ns() / 1000000u; }
+uint64_t airlock_timer_us(void) { return airlock_timer_ns() / 1000u; }
+uint64_t airlock_timer_ms(void) { return airlock_timer_ns() / 1000000u; }
 
-cellar_status_t cellar_timer_sleep_until(uint64_t deadline_ns)
+airlock_status_t airlock_timer_sleep_until(uint64_t deadline_ns)
 {
-    uint64_t now = cellar_timer_ns();
+    uint64_t now = airlock_timer_ns();
     struct timespec ts;
     if (deadline_ns <= now)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ts.tv_sec  = (time_t)(deadline_ns / 1000000000ull);
     ts.tv_nsec = (long)(deadline_ns % 1000000000ull);
     while (clock_nanosleep(CLOCK_MONOTONIC, TIMER_ABSTIME, &ts, NULL) != 0)
         ; /* EINTR: keep waiting toward the same absolute deadline */
-    CELLAR_TRACE(CELLAR_TRACE_TIMER, "sleep_until(%llu) done",
+    AIRLOCK_TRACE(AIRLOCK_TRACE_TIMER, "sleep_until(%llu) done",
                  (unsigned long long)deadline_ns);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_timer_spin_until(uint64_t deadline_ns)
+void airlock_timer_spin_until(uint64_t deadline_ns)
 {
-    while (cellar_timer_ns() < deadline_ns)
+    while (airlock_timer_ns() < deadline_ns)
         ; /* deliberate busy-wait */
 }
 
 /* ---- Frame-time tracking -------------------------------------------------- */
 
-void cellar_frametime_init(cellar_frametime_t *ft)
+void airlock_frametime_init(airlock_frametime_t *ft)
 {
     if (ft) {
         ft->count = 0;
@@ -66,17 +66,17 @@ void cellar_frametime_init(cellar_frametime_t *ft)
     }
 }
 
-void cellar_frametime_add(cellar_frametime_t *ft, uint64_t frame_ns)
+void airlock_frametime_add(airlock_frametime_t *ft, uint64_t frame_ns)
 {
     if (!ft)
         return;
     ft->history[ft->pos] = frame_ns;
-    ft->pos = (ft->pos + 1) % CELLAR_FRAMETIME_HISTORY;
-    if (ft->count < CELLAR_FRAMETIME_HISTORY)
+    ft->pos = (ft->pos + 1) % AIRLOCK_FRAMETIME_HISTORY;
+    if (ft->count < AIRLOCK_FRAMETIME_HISTORY)
         ft->count++;
 }
 
-void cellar_frametime_set_waits(cellar_frametime_t *ft,
+void airlock_frametime_set_waits(airlock_frametime_t *ft,
                                 uint64_t cpu_ns, uint64_t gpu_ns,
                                 uint64_t translate_ns)
 {
@@ -87,11 +87,11 @@ void cellar_frametime_set_waits(cellar_frametime_t *ft,
     ft->translate_wait_ns = translate_ns;
 }
 
-void cellar_frametime_report(const cellar_frametime_t *ft,
-                             cellar_frametime_stats_t *out)
+void airlock_frametime_report(const airlock_frametime_t *ft,
+                             airlock_frametime_stats_t *out)
 {
     double sum = 0;
-    uint64_t sorted[CELLAR_FRAMETIME_HISTORY];
+    uint64_t sorted[AIRLOCK_FRAMETIME_HISTORY];
     size_t i, n;
     if (!ft || !out)
         return;
@@ -102,8 +102,8 @@ void cellar_frametime_report(const cellar_frametime_t *ft,
         return;
 
     for (i = 0; i < n; i++) {
-        size_t idx = (ft->pos + CELLAR_FRAMETIME_HISTORY - n + i) %
-                     CELLAR_FRAMETIME_HISTORY;
+        size_t idx = (ft->pos + AIRLOCK_FRAMETIME_HISTORY - n + i) %
+                     AIRLOCK_FRAMETIME_HISTORY;
         sorted[i] = ft->history[idx];
         sum += (double)sorted[i];
     }

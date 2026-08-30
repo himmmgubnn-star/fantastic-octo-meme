@@ -8,8 +8,8 @@
 #include <string.h>
 #include <strings.h>
 
-#include "cellar/cellar.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -71,7 +71,7 @@ static void make_path(char *dst, size_t n, HKEY root, const char *sub)
     }
 }
 
-static LONG WINAPI cellar_RegOpenKeyExA(HKEY hKey, const char *sub,
+static LONG WINAPI airlock_RegOpenKeyExA(HKEY hKey, const char *sub,
                                         DWORD options, REGSAM sam, HKEY *out)
 {
     char path[256];
@@ -98,7 +98,7 @@ static LONG WINAPI cellar_RegOpenKeyExA(HKEY hKey, const char *sub,
     return ERROR_FILE_NOT_FOUND;
 }
 
-static LONG WINAPI cellar_RegSetValueExA(HKEY hKey, const char *name,
+static LONG WINAPI airlock_RegSetValueExA(HKEY hKey, const char *name,
                                          DWORD reserved, DWORD type,
                                          const unsigned char *data, DWORD cb)
 {
@@ -111,7 +111,7 @@ static LONG WINAPI cellar_RegSetValueExA(HKEY hKey, const char *name,
     return ERROR_SUCCESS;
 }
 
-static LONG WINAPI cellar_RegQueryValueExA(HKEY hKey, const char *name,
+static LONG WINAPI airlock_RegQueryValueExA(HKEY hKey, const char *name,
                                            DWORD *reserved, DWORD *type,
                                            unsigned char *data, DWORD *cb)
 {
@@ -134,21 +134,21 @@ static LONG WINAPI cellar_RegQueryValueExA(HKEY hKey, const char *name,
     return ERROR_SUCCESS;
 }
 
-static LONG WINAPI cellar_RegCloseKey(HKEY hKey)
+static LONG WINAPI airlock_RegCloseKey(HKEY hKey)
 {
     UNUSED(hKey);
     return ERROR_SUCCESS;
 }
 
-static const cellar_export_entry_t k_exports[] = {
-    { "RegOpenKeyExA",   (void *)&cellar_RegOpenKeyExA },
-    { "RegSetValueExA",  (void *)&cellar_RegSetValueExA },
-    { "RegQueryValueExA",(void *)&cellar_RegQueryValueExA },
-    { "RegCloseKey",     (void *)&cellar_RegCloseKey },
+static const airlock_export_entry_t k_exports[] = {
+    { "RegOpenKeyExA",   (void *)&airlock_RegOpenKeyExA },
+    { "RegSetValueExA",  (void *)&airlock_RegSetValueExA },
+    { "RegQueryValueExA",(void *)&airlock_RegQueryValueExA },
+    { "RegCloseKey",     (void *)&airlock_RegCloseKey },
 };
 
-static const cellar_module_t k_mod = {
+static const airlock_module_t k_mod = {
     "ADVAPI32.dll", k_exports, sizeof k_exports / sizeof k_exports[0]
 };
 
-const cellar_module_t *cellar_win32_module_advapi32(void) { return &k_mod; }
+const airlock_module_t *airlock_win32_module_advapi32(void) { return &k_mod; }

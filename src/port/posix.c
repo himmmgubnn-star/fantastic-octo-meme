@@ -28,10 +28,10 @@
 #include <sys/syscall.h>
 #endif
 
-#include "cellar/cellar.h"
-#include "cellar/platform.h"
+#include "airlock/airlock.h"
+#include "airlock/platform.h"
 
-void cellar_sleep_ms(uint32_t ms)
+void airlock_sleep_ms(uint32_t ms)
 {
     struct timespec ts;
     ts.tv_sec  = (time_t)(ms / 1000u);
@@ -40,7 +40,7 @@ void cellar_sleep_ms(uint32_t ms)
         ; /* retry on signal interruption */
 }
 
-uint64_t cellar_monotonic_ms(void)
+uint64_t airlock_monotonic_ms(void)
 {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
@@ -48,7 +48,7 @@ uint64_t cellar_monotonic_ms(void)
     return (uint64_t)ts.tv_sec * 1000u + (uint64_t)ts.tv_nsec / 1000000u;
 }
 
-uint64_t cellar_perf_counter(void)
+uint64_t airlock_perf_counter(void)
 {
     struct timespec ts;
     if (clock_gettime(CLOCK_MONOTONIC, &ts) != 0)
@@ -56,15 +56,15 @@ uint64_t cellar_perf_counter(void)
     return (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
 }
 
-uint64_t cellar_perf_frequency(void)
+uint64_t airlock_perf_frequency(void)
 {
     return 1000000000ull; /* perf counter counts nanoseconds */
 }
 
 /* Difference between the POSIX epoch (1970) and the FILETIME epoch (1601). */
-#define CELLAR_EPOCH_1970_TO_1601 ((uint64_t)11644473600ull)
+#define AIRLOCK_EPOCH_1970_TO_1601 ((uint64_t)11644473600ull)
 
-void cellar_system_time_as_filetime(uint64_t *out_100ns_since_1601)
+void airlock_system_time_as_filetime(uint64_t *out_100ns_since_1601)
 {
     struct timespec ts;
     uint64_t ns;
@@ -73,15 +73,15 @@ void cellar_system_time_as_filetime(uint64_t *out_100ns_since_1601)
         return;
     }
     ns = (uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec;
-    *out_100ns_since_1601 = (ns / 100ull) + CELLAR_EPOCH_1970_TO_1601 * 10000000ull;
+    *out_100ns_since_1601 = (ns / 100ull) + AIRLOCK_EPOCH_1970_TO_1601 * 10000000ull;
 }
 
-uint32_t cellar_getpid(void)
+uint32_t airlock_getpid(void)
 {
     return (uint32_t)getpid();
 }
 
-uint32_t cellar_gettid(void)
+uint32_t airlock_gettid(void)
 {
 #ifdef __linux__
     return (uint32_t)syscall(SYS_gettid);
@@ -90,7 +90,7 @@ uint32_t cellar_gettid(void)
 #endif
 }
 
-cellar_status_t cellar_map_file(const char *path, cellar_mapped_file_t *out)
+airlock_status_t airlock_map_file(const char *path, airlock_mapped_file_t *out)
 {
     int fd;
     struct stat st;
@@ -98,15 +98,15 @@ cellar_status_t cellar_map_file(const char *path, cellar_mapped_file_t *out)
     size_t len;
 
     if (!path || !out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(out, 0, sizeof *out);
 
     fd = open(path, O_RDONLY);
     if (fd < 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (fstat(fd, &st) != 0 || st.st_size < 0) {
         close(fd);
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
     len = (size_t)st.st_size;
     if (len == 0) {
@@ -117,22 +117,22 @@ cellar_status_t cellar_map_file(const char *path, cellar_mapped_file_t *out)
         out->_region = NULL;
         out->_region_len = 0;
         close(fd);
-        return CELLAR_OK;
+        return AIRLOCK_OK;
     }
 
     map = mmap(NULL, len, PROT_READ, MAP_PRIVATE, fd, 0);
     close(fd);
     if (map == MAP_FAILED)
-        return CELLAR_ERR_OUT_OF_MEMORY;
+        return AIRLOCK_ERR_OUT_OF_MEMORY;
 
     out->data = map;
     out->size = len;
     out->_region = map;
     out->_region_len = len;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_unmap_file(cellar_mapped_file_t *mf)
+void airlock_unmap_file(airlock_mapped_file_t *mf)
 {
     if (!mf)
         return;

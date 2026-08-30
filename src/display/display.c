@@ -6,15 +6,15 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/display.h"
+#include "airlock/airlock.h"
+#include "airlock/display.h"
 
-static cellar_display_t g_current;
+static airlock_display_t g_current;
 static int g_have;
 
-void cellar_display_init_default(cellar_display_t *d)
+void airlock_display_init_default(airlock_display_t *d)
 {
-    cellar_monitor_t m;
+    airlock_monitor_t m;
     if (!d)
         return;
     memset(d, 0, sizeof *d);
@@ -25,34 +25,34 @@ void cellar_display_init_default(cellar_display_t *d)
     m.dpi = 96;
     m.refresh_hz = 60;
     m.hdr = 0;
-    m.orientation = CELLAR_ORIENT_LANDSCAPE;
+    m.orientation = AIRLOCK_ORIENT_LANDSCAPE;
     m.primary = 1;
     d->monitors[0] = m;
     d->count = 1;
-    d->mode = CELLAR_WINDOW_WINDOWED;
+    d->mode = AIRLOCK_WINDOW_WINDOWED;
 }
 
-cellar_status_t cellar_display_add_monitor(cellar_display_t *d,
-                                           const cellar_monitor_t *m)
+airlock_status_t airlock_display_add_monitor(airlock_display_t *d,
+                                           const airlock_monitor_t *m)
 {
     if (!d || !m)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (d->count >= 8)
-        return CELLAR_ERR_OUT_OF_MEMORY;
+        return AIRLOCK_ERR_OUT_OF_MEMORY;
     d->monitors[d->count++] = *m;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_display_set_mode(cellar_display_t *d,
-                                        cellar_window_mode_t mode)
+airlock_status_t airlock_display_set_mode(airlock_display_t *d,
+                                        airlock_window_mode_t mode)
 {
     if (!d)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     d->mode = mode;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-const cellar_monitor_t *cellar_display_primary(const cellar_display_t *d)
+const airlock_monitor_t *airlock_display_primary(const airlock_display_t *d)
 {
     size_t i;
     if (!d || d->count == 0)
@@ -63,17 +63,17 @@ const cellar_monitor_t *cellar_display_primary(const cellar_display_t *d)
     return &d->monitors[0];
 }
 
-float cellar_display_scale(const cellar_monitor_t *m)
+float airlock_display_scale(const airlock_monitor_t *m)
 {
     if (!m || m->dpi == 0)
         return 1.0f;
     return (float)m->dpi / 96.0f;
 }
 
-cellar_display_t *cellar_display_current(void)
+airlock_display_t *airlock_display_current(void)
 {
     if (!g_have) {
-        cellar_display_init_default(&g_current);
+        airlock_display_init_default(&g_current);
         g_have = 1;
     }
     return &g_current;

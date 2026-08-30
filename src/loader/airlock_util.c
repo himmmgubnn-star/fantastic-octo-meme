@@ -1,0 +1,166 @@
+/*
+ * airlock_util.c — shared utilities: status strings, logging, endian reads,
+ * and the export-table string hash.
+ *
+ * SPDX-License-Identifier: MIT
+ */
+#define _POSIX_C_SOURCE 200809L
+
+#include <errno.h>
+#include <stdarg.h>
+#include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+
+#include "airlock/airlock.h"
+
+const char *airlock_status_string(airlock_status_t status)
+{
+    switch (status) {
+    case AIRLOCK_OK:                       return "ok";
+    case AIRLOCK_ERR_INVALID_ARGUMENT:     return "invalid argument";
+    case AIRLOCK_ERR_OUT_OF_MEMORY:        return "out of memory";
+    case AIRLOCK_ERR_NOT_IMPLEMENTED:      return "not implemented";
+    case AIRLOCK_ERR_PE_NOT_PE:            return "not a PE image (bad MZ/PE signature)";
+    case AIRLOCK_ERR_PE_TRUNCATED:         return "PE image truncated";
+    case AIRLOCK_ERR_PE_BAD_MAGIC:         return "unknown PE optional-header magic";
+    case AIRLOCK_ERR_PE_BAD_SECTIONS:      return "malformed PE section table";
+    case AIRLOCK_ERR_PE_BAD_IMPORTS:       return "malformed PE import directory";
+    case AIRLOCK_ERR_PE_BAD_EXPORTS:       return "malformed PE export directory";
+    case AIRLOCK_ERR_PE_BAD_RELOCATIONS:   return "malformed PE base relocation table";
+    default:                              return "unknown status";
+    }
+}
+
+static const char *level_label(int level)
+{
+    switch (level) {
+    case AIRLOCK_LEVEL_ERROR: return "error";
+    case AIRLOCK_LEVEL_WARN:  return "warn";
+    case AIRLOCK_LEVEL_INFO:  return "info";
+    case AIRLOCK_LEVEL_DEBUG: return "debug";
+    case AIRLOCK_LEVEL_TRACE: return "trace";
+    default:                 return "?";
+    }
+}
+
+void airlock_vlog(int level, const char *module, const char *fmt, ...)
+{
+    FILE *out = (level <= AIRLOCK_LEVEL_ERROR) ? stderr : stdout;
+    char  buf[1024];
+    va_list ap;
+
+    va_start(ap, fmt);
+    vsnprintf(buf, sizeof buf, fmt, ap);
+    va_end(ap);
+
+    fprintf(out, "[%s] %s: %s\n", level_label(level),
+            module ? module : "airlock", buf);
+}
+
+/* ---- Little-endian readers (safe against unaligned access) --------------- */
+
+uint16_t airlock_le16(const void *p)
+{
+    const uint8_t *b = (const uint8_t *)p;
+    return (uint16_t)(b[0] | ((uint16_t)b[1] << 8));
+}
+
+uint32_t airlock_le32(const void *p)
+{
+    const uint8_t *b = (const uint8_t *)p;
+    return (uint32_t)b[0] | ((uint32_t)b[1] << 8) |
+           ((uint32_t)b[2] << 16) | ((uint32_t)b[3] << 24);
+}
+
+uint64_t airlock_le64(const void *p)
+{
+    const uint8_t *b = (const uint8_t *)p;
+    return (uint64_t)airlock_le32(b) | ((uint64_t)airlock_le32(b + 4) << 32);
+}
+
+/* ---- djb2 (Bernstein) string hash ---------------------------------------- */
+
+uint32_t airlock_hash_str(const char *s)
+{
+    uint32_t h = 5381;
+    unsigned char c;
+    while ((c = (unsigned char)*s++) != 0)
+        h = ((h << 5) + h) + c; /* h * 33 + c */
+    return h;
+}
+
+int airlock_mkdir_p(const char *path)
+{
+    char tmp[1024];
+    size_t i, n;
+    if (!path || !*path)
+        return -1;
+    snprintf(tmp, sizeof tmp, "%s", path);
+    n = strlen(tmp);
+    while (n > 0 && tmp[n - 1] == '/') {
+        tmp[--n] = '\0';
+    }
+    for (i = 1; i < n; i++) {
+        if (tmp[i] == '/') {
+            tmp[i] = '\0';
+            if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+                tmp[i] = '/';
+                return -1;
+            }
+            tmp[i] = '/';
+        }
+    }
+    if (mkdir(tmp, 0755) != 0 && errno != EEXIST)
+        return -1;
+    return 0;
+}
+
+void airlock_path_join(char *dst, size_t n, const char *a, const char *b)
+{
+    size_t la;
+    if (!dst || n == 0)
+        return;
+    dst[0] = '\0';
+    if (!a) a = "";
+    if (!b) b = "";
+    la = strlen(a);
+    if (la > 0 && a[la - 1] == '/')
+        snprintf(dst, n, "%s%s", a, b);
+    else if (la == 0)
+        snprintf(dst, n, "%s", b);
+    else
+        snprintf(dst, n, "%s/%s", a, b);
+}
+
+void airlock_strlcpy(char *dst, size_t n, const char *src)
+{
+    size_t i = 0;
+    if (!dst || n == 0)
+        return;
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+    while (i + 1 < n && src[i]) {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
+}
+
+void airlock_strlcat(char *dst, size_t n, const char *src)
+{
+    size_t dlen = 0, slen = 0;
+    if (!dst || n == 0)
+        return;
+    while (dlen < n - 1 && dst[dlen])
+        dlen++;
+    if (src)
+        while (src[slen] && dlen + slen + 1 < n)
+            slen++;
+    if (slen)
+        memcpy(dst + dlen, src, slen);
+    dst[dlen + slen] = '\0';
+}

@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(cellar C)
+project(airlock C)
 
 set(CMAKE_C_STANDARD 11)
 set(CMAKE_C_STANDARD_REQUIRED ON)
@@ -11,8 +11,8 @@ endif()
 # ---------------------------------------------------------------------------
 # Sources shared by the library, the CLI, and the tests.
 # ---------------------------------------------------------------------------
-set(CELLAR_LIB_SOURCES
-  src/loader/cellar_util.c
+set(AIRLOCK_LIB_SOURCES
+  src/loader/airlock_util.c
   src/loader/pe.c
   src/loader/loader.c
   src/win32/api.c
@@ -60,64 +60,64 @@ set(CELLAR_LIB_SOURCES
   src/testlab/testlab.c
   src/workspace/workspace.c
 )
-if(CELLAR_AUDIO_ALSA)
-  list(APPEND CELLAR_LIB_SOURCES src/audio/alsa.c)
+if(AIRLOCK_AUDIO_ALSA)
+  list(APPEND AIRLOCK_LIB_SOURCES src/audio/alsa.c)
 endif()
 
-set(CELLAR_LIB_HEADERS
-  include/cellar/cellar.h
-  include/cellar/pe.h
-  include/cellar/loader.h
-  include/cellar/win32.h
-  include/cellar/platform.h
-  include/cellar/audio.h
-  include/cellar/perf.h
-  include/cellar/compat.h
-  include/cellar/timer.h
-  include/cellar/sync.h
-  include/cellar/shmem.h
-  include/cellar/trace.h
-  include/cellar/shadercache.h
-  include/cellar/plugin.h
-  include/cellar/crash.h
-  include/cellar/inspect.h
-  include/cellar/db.h
-  include/cellar/runtime.h
-  include/cellar/shell.h
-  include/cellar/prefix.h
-  include/cellar/display.h
-  include/cellar/security.h
-  include/cellar/desktop.h
-  include/cellar/installer.h
-  include/cellar/com.h
-  include/cellar/service.h
-  include/cellar/notify.h
-  include/cellar/a11y.h
-  include/cellar/locale.h
-  include/cellar/print.h
-  include/cellar/device.h
-  include/cellar/debug.h
-  include/cellar/testlab.h
-  include/cellar/workspace.h
+set(AIRLOCK_LIB_HEADERS
+  include/airlock/airlock.h
+  include/airlock/pe.h
+  include/airlock/loader.h
+  include/airlock/win32.h
+  include/airlock/platform.h
+  include/airlock/audio.h
+  include/airlock/perf.h
+  include/airlock/compat.h
+  include/airlock/timer.h
+  include/airlock/sync.h
+  include/airlock/shmem.h
+  include/airlock/trace.h
+  include/airlock/shadercache.h
+  include/airlock/plugin.h
+  include/airlock/crash.h
+  include/airlock/inspect.h
+  include/airlock/db.h
+  include/airlock/runtime.h
+  include/airlock/shell.h
+  include/airlock/prefix.h
+  include/airlock/display.h
+  include/airlock/security.h
+  include/airlock/desktop.h
+  include/airlock/installer.h
+  include/airlock/com.h
+  include/airlock/service.h
+  include/airlock/notify.h
+  include/airlock/a11y.h
+  include/airlock/locale.h
+  include/airlock/print.h
+  include/airlock/device.h
+  include/airlock/debug.h
+  include/airlock/testlab.h
+  include/airlock/workspace.h
 )
 
-add_library(cellar STATIC ${CELLAR_LIB_SOURCES} ${CELLAR_LIB_HEADERS})
-target_include_directories(cellar PUBLIC include)
-target_link_libraries(cellar PUBLIC ${CMAKE_DL_LIBS})
+add_library(airlock STATIC ${AIRLOCK_LIB_SOURCES} ${AIRLOCK_LIB_HEADERS})
+target_include_directories(airlock PUBLIC include)
+target_link_libraries(airlock PUBLIC ${CMAKE_DL_LIBS})
 
-if(CELLAR_AUDIO_ALSA)
+if(AIRLOCK_AUDIO_ALSA)
   find_package(ALSA REQUIRED)
-  target_link_libraries(cellar PUBLIC ALSA::ALSA)
-  target_compile_definitions(cellar PUBLIC CELLAR_AUDIO_ALSA)
+  target_link_libraries(airlock PUBLIC ALSA::ALSA)
+  target_compile_definitions(airlock PUBLIC AIRLOCK_AUDIO_ALSA)
 endif()
 
-add_executable(cellar-cli src/cli.c)
-target_link_libraries(cellar-cli PRIVATE cellar)
+add_executable(airlock-cli src/cli.c)
+target_link_libraries(airlock-cli PRIVATE airlock)
 
 enable_testing()
 foreach(t loader audio perf compat kit ecosystem workspace)
   add_executable(test_${t} tests/test_${t}.c)
-  target_link_libraries(test_${t} PRIVATE cellar)
+  target_link_libraries(test_${t} PRIVATE airlock)
   add_test(NAME ${t} COMMAND test_${t})
 endforeach()
 
@@ -131,8 +131,8 @@ endforeach()
 #         -B build-android
 #   cmake --build build-android
 #
-# On Android the CLI is built (via cellar-cli target name `cellar-cli`); a
-# packaged app would link libcellar.a and call cellar_win32_init() itself.
+# On Android the CLI is built (via airlock-cli target name `airlock-cli`); a
+# packaged app would link libairlock.a and call airlock_win32_init() itself.
 # Audio defaults to the null/WAV sink on Android (no ALSA) and can later be
 # replaced with an AAudio/Oboe backend.
 # ---------------------------------------------------------------------------

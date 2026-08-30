@@ -16,9 +16,9 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/loader.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/loader.h"
+#include "airlock/win32.h"
 
 static uint32_t rng_state;
 
@@ -38,15 +38,15 @@ int main(int argc, char **argv)
     const char *path = argc > 1 ? argv[1] : "samples/hello.exe";
     unsigned long iters = argc > 2 ? strtoul(argv[2], NULL, 10) : 2000;
     unsigned long seed = argc > 3 ? strtoul(argv[3], NULL, 10) : 12345;
-    cellar_image_t img;
-    cellar_status_t st;
+    airlock_image_t img;
+    airlock_status_t st;
     FILE *f;
     long len;
     unsigned char *seedbuf;
     unsigned char *mut;
     unsigned long i, j;
 
-    cellar_win32_init();
+    airlock_win32_init();
 
     f = fopen(path, "rb");
     if (!f) {
@@ -71,14 +71,14 @@ int main(int argc, char **argv)
         for (j = 0; j < nmut; j++)
             mut[next_rand() % (unsigned)len] = (unsigned char)next_rand();
 
-        st = cellar_image_load_buffer(mut, (size_t)len,
-                                      CELLAR_LOAD_DEFAULT |
-                                      CELLAR_LOAD_PARSE_EXPORTS |
-                                      CELLAR_LOAD_PARSE_RELOCS, &img);
+        st = airlock_image_load_buffer(mut, (size_t)len,
+                                      AIRLOCK_LOAD_DEFAULT |
+                                      AIRLOCK_LOAD_PARSE_EXPORTS |
+                                      AIRLOCK_LOAD_PARSE_RELOCS, &img);
         /* Loader must return a typed status and never crash. On success it
          * must also clean up cleanly (ASan validates no leak). */
-        if (st == CELLAR_OK)
-            cellar_image_unload(&img);
+        if (st == AIRLOCK_OK)
+            airlock_image_unload(&img);
     }
 
     printf("fuzz_loader: %lu iterations against %s passed (seed %lu)\n",

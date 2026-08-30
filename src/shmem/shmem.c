@@ -12,8 +12,8 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/shmem.h"
+#include "airlock/airlock.h"
+#include "airlock/shmem.h"
 
 static size_t round_up_pow2(size_t n)
 {
@@ -23,39 +23,39 @@ static size_t round_up_pow2(size_t n)
     return v;
 }
 
-cellar_status_t cellar_ring_create(cellar_ring_t *r, size_t capacity)
+airlock_status_t airlock_ring_create(airlock_ring_t *r, size_t capacity)
 {
     if (!r || capacity == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(r, 0, sizeof *r);
     r->capacity = round_up_pow2(capacity);
     r->mask = (uint32_t)(r->capacity - 1);
     r->buf = malloc(r->capacity);
     if (!r->buf)
-        return CELLAR_ERR_OUT_OF_MEMORY;
-    return CELLAR_OK;
+        return AIRLOCK_ERR_OUT_OF_MEMORY;
+    return AIRLOCK_OK;
 }
 
-size_t cellar_ring_capacity(const cellar_ring_t *r)
+size_t airlock_ring_capacity(const airlock_ring_t *r)
 {
     return r ? r->capacity : 0;
 }
 
-size_t cellar_ring_used(const cellar_ring_t *r)
+size_t airlock_ring_used(const airlock_ring_t *r)
 {
     if (!r)
         return 0;
     return (size_t)(r->tail - r->head);
 }
 
-size_t cellar_ring_free(const cellar_ring_t *r)
+size_t airlock_ring_free(const airlock_ring_t *r)
 {
     if (!r)
         return 0;
     return r->capacity - (size_t)(r->tail - r->head);
 }
 
-size_t cellar_ring_produce(cellar_ring_t *r, const void *data, size_t len)
+size_t airlock_ring_produce(airlock_ring_t *r, const void *data, size_t len)
 {
     uint64_t tail, head;
     size_t free_space, first;
@@ -81,7 +81,7 @@ size_t cellar_ring_produce(cellar_ring_t *r, const void *data, size_t len)
     return len;
 }
 
-size_t cellar_ring_consume(cellar_ring_t *r, void *dst, size_t len)
+size_t airlock_ring_consume(airlock_ring_t *r, void *dst, size_t len)
 {
     uint64_t tail, head;
     size_t used, first;
@@ -106,7 +106,7 @@ size_t cellar_ring_consume(cellar_ring_t *r, void *dst, size_t len)
     return len;
 }
 
-void cellar_ring_drop(cellar_ring_t *r, size_t len)
+void airlock_ring_drop(airlock_ring_t *r, size_t len)
 {
     uint64_t head, tail;
     size_t used;
@@ -120,7 +120,7 @@ void cellar_ring_drop(cellar_ring_t *r, size_t len)
     r->head = head + len;
 }
 
-size_t cellar_ring_peek(const cellar_ring_t *r, void *dst, size_t len)
+size_t airlock_ring_peek(const airlock_ring_t *r, void *dst, size_t len)
 {
     uint64_t head, tail;
     size_t used, first;
@@ -142,7 +142,7 @@ size_t cellar_ring_peek(const cellar_ring_t *r, void *dst, size_t len)
     return len;
 }
 
-void cellar_ring_destroy(cellar_ring_t *r)
+void airlock_ring_destroy(airlock_ring_t *r)
 {
     if (!r)
         return;

@@ -1,6 +1,6 @@
-# Cellar Architecture
+# Airlock Architecture
 
-Cellar brings Windows programs to Linux by supplying the pieces a Windows
+Airlock brings Windows programs to Linux by supplying the pieces a Windows
 binary expects from the OS. This document describes how those pieces are
 structured and how they fit together.
 
@@ -12,7 +12,7 @@ structured and how they fit together.
         ▼
  ┌───────────────┐    ┌─────────────────┐    ┌──────────────────────────┐
  │  PE loader     │──▶│  Image model     │──▶│  CPU / ABI emulation     │
- │  (src/loader)  │    │  cellar_image_t  │    │  (planned — see roadmap) │
+ │  (src/loader)  │    │  airlock_image_t  │    │  (planned — see roadmap) │
  └───────────────┘    └────────┬─────────┘    └──────────────────────────┘
                                │ imports
                                ▼
@@ -32,38 +32,38 @@ There are three responsibilities, each intentionally decoupled:
    virtual addresses (RVAs) and the entry point behave like they do on
    Windows.
 3. **Execution** — run the entry point, resolving every call into a Win32 API
-   Cellar implements. *(Not yet implemented — see ROADMAP.md.)*
+   Airlock implements. *(Not yet implemented — see ROADMAP.md.)*
 
 ## The PE loader (`src/loader`)
 
-### Format definitions — `include/cellar/pe.h`
+### Format definitions — `include/airlock/pe.h`
 
 The PE/COFF layout is captured as **packed** structs that mirror the on-disk
 format exactly (e.g. `IMAGE_DOS_HEADER`, `IMAGE_FILE_HEADER`,
 `IMAGE_OPTIONAL_HEADER`, `IMAGE_SECTION_HEADER`, the import/export
 directories). Because they are packed, the parser can map a file buffer onto
 them directly. All on-disk integers are little-endian and are read through
-`cellar_le16/32/64` helpers, so the loader is correct regardless of host
+`airlock_le16/32/64` helpers, so the loader is correct regardless of host
 byte order.
 
 ### Parsing — `src/loader/pe.c`
 
-`cellar_parse_headers()` validates signatures (`MZ`, `PE\0\0`, optional-header
+`airlock_parse_headers()` validates signatures (`MZ`, `PE\0\0`, optional-header
 magic `PE32`/`PE32+`), checks that every claimed structure fits inside the
 buffer, and populates the header fields plus the section table. It returns a
-typed `cellar_status_t` on any problem instead of dereferencing garbage.
+typed `airlock_status_t` on any problem instead of dereferencing garbage.
 
 RVA translation lives here too:
 
-- `cellar_image_rva()` maps an RVA into the assembled virtual image.
-- `cellar_image_rva_raw()` maps an RVA back to the original file bytes.
-- `cellar_image_read()` is a bounds-checked memcpy against the image.
+- `airlock_image_rva()` maps an RVA into the assembled virtual image.
+- `airlock_image_rva_raw()` maps an RVA back to the original file bytes.
+- `airlock_image_read()` is a bounds-checked memcpy against the image.
 
 ### Loading — `src/loader/loader.c`
 
-`cellar_image_load_file()` / `cellar_image_load_buffer()` run the pipeline:
+`airlock_image_load_file()` / `airlock_image_load_buffer()` run the pipeline:
 
-1. **Parse headers** into a `cellar_image_t`.
+1. **Parse headers** into a `airlock_image_t`.
 2. **Copy** the raw buffer so the image owns its bytes.
 3. **Map sections** — `calloc` a section-aligned image sized by
    `size_of_image`, copy the headers region, then copy each section's raw data
@@ -79,20 +79,20 @@ RVA translation lives here too:
 
 ## The Win32 API layer (`src/win32`)
 
-Windows executables call functions in system DLLs. Cellar models each system
+Windows executables call functions in system DLLs. Airlock models each system
 DLL as a *module* holding an array of `{name, fn}` export entries.
 
 ### Registry — `src/win32/api.c`
 
-- `cellar_win32_register_module()` adds a module descriptor (referenced, not
+- `airlock_win32_register_module()` adds a module descriptor (referenced, not
   copied — descriptors must outlive the process).
 - Module names are compared case- and extension-insensitively, so
   `kernel32` ≡ `KERNEL32.dll`.
-- `cellar_win32_resolve(module, function, ordinal)` returns the Cellar
+- `airlock_win32_resolve(module, function, ordinal)` returns the Airlock
   function pointer for an import, or `NULL` (logged) when unknown.
 
-The loader calls `cellar_win32_resolve()` for every import thunk, so a Windows
-binary binds to Cellar's native implementations exactly as it would bind to
+The loader calls `airlock_win32_resolve()` for every import thunk, so a Windows
+binary binds to Airlock's native implementations exactly as it would bind to
 real DLLs.
 
 ### Modules — `src/win32/mod_*.c`
@@ -102,11 +102,11 @@ exported through the module table. Today they are honest **functional stubs**:
 they log the call and return a harmless value. Real implementations map to
 Linux syscalls and libc (file I/O, the console, timers, the heap, …).
 
-`src/win32/init.c` registers every module via `cellar_win32_init()`.
+`src/win32/init.c` registers every module via `airlock_win32_init()`.
 
 ## The portability layer — `src/port/posix.c`
 
-`include/cellar/platform.h` is the seam for everything OS-specific: clocks and
+`include/airlock/platform.h` is the seam for everything OS-specific: clocks and
 sleep, pid/tid, `FILETIME` system time, and zero-copy file mapping. A single
 POSIX implementation serves both **Linux and Android** (Android's Bionic libc
 exposes the same syscalls). Porting to a new OS means adding one more
@@ -115,19 +115,19 @@ all Linux environments, including Android" concrete.
 
 ## The audio subsystem — `src/audio/`
 
-Games output audio through `WINMM`/`DirectSound`/`XAudio2`. Cellar funnels
+Games output audio through `WINMM`/`DirectSound`/`XAudio2`. Airlock funnels
 those into a small set of **backends** so the Win32 layer never touches
 hardware:
 
 ```
-winmm.dll (waveOutWrite)  ->  cellar_audio_device_t  ->  backend
+winmm.dll (waveOutWrite)  ->  airlock_audio_device_t  ->  backend
                                                       |-> WAV file sink (default)
                                                       |-> ALSA (make ALSA=1)
                                                       `-> null
 ```
 
 - `src/audio/audio.c` — backend dispatch + the dependency-free **WAV sink**
-  (writes real RIFF/WAVE files, used by tests and `cellar --audio`).
+  (writes real RIFF/WAVE files, used by tests and `airlock --audio`).
 - `src/audio/alsa.c` — optional **ALSA** backend for real low-latency output
   on desktop Linux (`make ALSA=1`, `-lasound`).
 - `src/win32/mod_winmm.c` — the `WINMM.dll` module games import: `waveOutOpen`,
@@ -140,24 +140,24 @@ Optimization for game-like Windows workloads:
 
 - **Counters** (`images_loaded`, `imports_resolved`, `map_bytes`,
   `mmap_reads`, `audio_bytes`, …) incremented by the loader and Win32 layer.
-- **Tunables** (`cellar_perf_options_t`): page pre-faulting (`--papi=1`),
+- **Tunables** (`airlock_perf_options_t`): page pre-faulting (`--papi=1`),
   the mmap threshold for zero-copy file loads, and large pages.
-- **Tracing** — a bounded ring buffer (`cellar_perf_trace`) for timeline dumps.
+- **Tracing** — a bounded ring buffer (`airlock_perf_trace`) for timeline dumps.
 - **Helpers** — a high-performance scheduling hint and page pre-faulting.
 
 Loading already benefits: large files are memory-mapped (zero-copy) via
-`cellar_map_file`, and `--papi=1` pre-faults every page of the mapped image so
+`airlock_map_file`, and `--papi=1` pre-faults every page of the mapped image so
 later execution doesn't stall on page-fault latency.
 
 ## The Application Compatibility Analyzer — `src/compat/`
 
-The flagship. `cellar_compat_analyze()` takes a loaded image and:
+The flagship. `airlock_compat_analyze()` takes a loaded image and:
 
 1. **Classifies each import** into a subsystem (graphics, audio, input,
    networking, filesystem, threading, system) via DLL-prefix and
    function-name heuristics.
-2. **Scores each subsystem** against Cellar's API database
-   (`cellar_win32_export_exists`), producing a percentage.
+2. **Scores each subsystem** against Airlock's API database
+   (`airlock_win32_export_exists`), producing a percentage.
 3. **Records unresolvable imports** as structured missing-API diagnostics
    (`module`, `function`, `called by`, recommendation).
 4. **Detects technologies** (Direct3D 11/12, OpenGL, Vulkan, XInput,
@@ -178,7 +178,7 @@ The flagship. `cellar_compat_analyze()` takes a loaded image and:
 
 ## Tracing, shader cache, plugins, crash — cross-cutting
 
-- `trace.c` — dynamic category tracing; `CELLAR_TRACE(cat, ...)` is a guarded
+- `trace.c` — dynamic category tracing; `AIRLOCK_TRACE(cat, ...)` is a guarded
   branch that costs nothing when disabled.
 - `gfx/shadercache.c` — persistent shader blob cache keyed by shader hash +
   GPU + driver + API version, with invalidation on identity change.
@@ -189,7 +189,7 @@ The flagship. `cellar_compat_analyze()` takes a loaded image and:
 
 ## The CLI — `src/cli.c`
 
-A thin driver: `cellar_win32_init()`, then either dump the module registry or
+A thin driver: `airlock_win32_init()`, then either dump the module registry or
 load and report one or more executables. It is intentionally small — it is a
 demo and debugging surface, not the product. Subcommands: `inspect`, `analyze`,
 `db`, `prefix`, `runtime`, `test`, `debug`, `--perf`, `--platform`, `--audio`,
@@ -197,7 +197,7 @@ demo and debugging surface, not the product. Subcommands: `inspect`, `analyze`,
 
 ## Compatibility ecosystem (Milestone 4.8)
 
-Five systems sit *around* the loader so Cellar can understand, remember, and
+Five systems sit *around* the loader so Airlock can understand, remember, and
 isolate Windows applications before it can execute them:
 
 1. **Inspector** (`src/inspect/inspect.c`) — walks PE data directories (TLS,
@@ -209,7 +209,9 @@ isolate Windows applications before it can execute them:
    project's biggest assets as real apps are inspected.
 3. **Prefix manager** (`src/prefix/prefix.c` + `src/shell/shell.c`) — named
    bottles with a `drive_c` tree. Shell variables (`%APPDATA%`, `%WINDIR%`, …)
-   expand into that tree. Backup/restore uses a tiny `CBK1` archive.
+   expand into that tree. Backup/restore uses a tiny `ALK1` archive (archives
+   written before the rebrand used the magic `CBK1`; restore still accepts
+   them, and every new archive is written as `ALK1`).
 4. **Test lab** (`src/testlab/testlab.c`) — behavioral tests plus one
    auto-generated export-presence test per registered Win32 function.
 5. **COM + shell** (`src/com/com.c`, `src/win32/mod_ole32.c`,
@@ -228,34 +230,34 @@ module's export table." Modules today: `KERNEL32`, `ntdll`, `USER32`,
 `ADVAPI32` (in-memory registry), `SHELL32`, `ole32`, `comdlg32`, `gdi32`,
 `ws2_32`, `version`, `WINMM`.
 
-## The Winaltor workspace layer — `src/workspace/workspace.c`
+## The Airlock workspace layer — `src/workspace/workspace.c`
 
 This is the product surface on top of the compatibility ecosystem. Each app is
-one isolated *workspace* (a Cellar prefix) plus a small `app.conf` record and a
+one isolated *workspace* (a Airlock prefix) plus a small `app.conf` record and a
 `profiles/` directory. It owns:
 
-- **Setup / library** — `cellar_workspace_install()` creates the prefix,
+- **Setup / library** — `airlock_workspace_install()` creates the prefix,
   inspects a source executable/installer, records architecture/graphics/audio/
   runtime requirements, and writes a shortcut.
-- **Profiles** — `cellar_profile_point_t` is the YAML DTO. Profiles are stored
+- **Profiles** — `airlock_profile_point_t` is the YAML DTO. Profiles are stored
   by label and always keep the executable hash; `profile_apply()` pushes a
   profile into the workspace record and `profile_diff()` renders what changed.
 - **Snapshots** — a config snapshot copies `app.conf`, `prefix.conf`, and the
   active profile into `snapshots/<label>/`; rollback restores those three.
-- **Doctor / support / diagnose** — `cellar_workspace_doctor()` produces a
+- **Doctor / support / diagnose** — `airlock_workspace_doctor()` produces a
   structured pre-flight report; `support()` writes a sanitized bundle;
   `diagnose()` classifies raw Wine/Box64 log lines into readable symptoms.
 - **Safety** — per-workspace permission bits and a plain-language dashboard
-  (`cellar_workspace_permissions_text()`), plus a malware-warning section in
+  (`airlock_workspace_permissions_text()`), plus a malware-warning section in
   the safety report.
 
 ## Conventions
 
-- **Public API lives in `include/cellar/`**; internal helpers are `static`.
-- **All failure paths return `cellar_status_t`** — never abort, never leak.
+- **Public API lives in `include/airlock/`**; internal helpers are `static`.
+- **All failure paths return `airlock_status_t`** — never abort, never leak.
 - **All RVA access is bounds-checked.** Malformed input must produce a typed
   error, not a crash.
-- **Logging is compile-time configurable** via `CELLAR_LOG_LEVEL` (0–4).
+- **Logging is compile-time configurable** via `AIRLOCK_LOG_LEVEL` (0–4).
 
 ## Testing strategy
 

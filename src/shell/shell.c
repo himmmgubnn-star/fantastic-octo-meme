@@ -7,14 +7,14 @@
 #include <string.h>
 #include <strings.h>
 
-#include "cellar/cellar.h"
-#include "cellar/shell.h"
+#include "airlock/airlock.h"
+#include "airlock/shell.h"
 
 static char g_bottle[512];
-static char g_paths[CELLAR_ENV_COUNT][512];
+static char g_paths[AIRLOCK_ENV_COUNT][512];
 static int g_inited;
 
-static const char *const k_names[CELLAR_ENV_COUNT] = {
+static const char *const k_names[AIRLOCK_ENV_COUNT] = {
     "APPDATA",
     "LOCALAPPDATA",
     "PROGRAMDATA",
@@ -27,97 +27,97 @@ static const char *const k_names[CELLAR_ENV_COUNT] = {
     "HOMEPATH",
 };
 
-cellar_status_t cellar_shell_init(const char *bottle)
+airlock_status_t airlock_shell_init(const char *bottle)
 {
     char drive[640];
     if (!bottle || !*bottle)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     snprintf(g_bottle, sizeof g_bottle, "%s", bottle);
-    cellar_path_join(drive, sizeof drive, bottle, "drive_c");
+    airlock_path_join(drive, sizeof drive, bottle, "drive_c");
 
-    cellar_path_join(g_paths[CELLAR_ENV_WINDIR], sizeof g_paths[0],
+    airlock_path_join(g_paths[AIRLOCK_ENV_WINDIR], sizeof g_paths[0],
                      drive, "windows");
-    snprintf(g_paths[CELLAR_ENV_SYSTEMROOT], sizeof g_paths[0], "%s",
-             g_paths[CELLAR_ENV_WINDIR]);
-    cellar_path_join(g_paths[CELLAR_ENV_PROGRAMFILES], sizeof g_paths[0],
+    snprintf(g_paths[AIRLOCK_ENV_SYSTEMROOT], sizeof g_paths[0], "%s",
+             g_paths[AIRLOCK_ENV_WINDIR]);
+    airlock_path_join(g_paths[AIRLOCK_ENV_PROGRAMFILES], sizeof g_paths[0],
                      drive, "Program Files");
-    cellar_path_join(g_paths[CELLAR_ENV_PROGRAMDATA], sizeof g_paths[0],
+    airlock_path_join(g_paths[AIRLOCK_ENV_PROGRAMDATA], sizeof g_paths[0],
                      drive, "ProgramData");
-    cellar_path_join(g_paths[CELLAR_ENV_USERPROFILE], sizeof g_paths[0],
+    airlock_path_join(g_paths[AIRLOCK_ENV_USERPROFILE], sizeof g_paths[0],
                      drive, "users/user");
-    cellar_path_join(g_paths[CELLAR_ENV_APPDATA], sizeof g_paths[0],
-                     g_paths[CELLAR_ENV_USERPROFILE], "AppData/Roaming");
-    cellar_path_join(g_paths[CELLAR_ENV_LOCALAPPDATA], sizeof g_paths[0],
-                     g_paths[CELLAR_ENV_USERPROFILE], "AppData/Local");
-    cellar_path_join(g_paths[CELLAR_ENV_TEMP], sizeof g_paths[0],
-                     g_paths[CELLAR_ENV_LOCALAPPDATA], "Temp");
-    snprintf(g_paths[CELLAR_ENV_HOMEDRIVE], sizeof g_paths[0], "C:");
-    snprintf(g_paths[CELLAR_ENV_HOMEPATH], sizeof g_paths[0], "\\users\\user");
+    airlock_path_join(g_paths[AIRLOCK_ENV_APPDATA], sizeof g_paths[0],
+                     g_paths[AIRLOCK_ENV_USERPROFILE], "AppData/Roaming");
+    airlock_path_join(g_paths[AIRLOCK_ENV_LOCALAPPDATA], sizeof g_paths[0],
+                     g_paths[AIRLOCK_ENV_USERPROFILE], "AppData/Local");
+    airlock_path_join(g_paths[AIRLOCK_ENV_TEMP], sizeof g_paths[0],
+                     g_paths[AIRLOCK_ENV_LOCALAPPDATA], "Temp");
+    snprintf(g_paths[AIRLOCK_ENV_HOMEDRIVE], sizeof g_paths[0], "C:");
+    snprintf(g_paths[AIRLOCK_ENV_HOMEPATH], sizeof g_paths[0], "\\users\\user");
     g_inited = 1;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_shell_ensure_dirs(void)
+airlock_status_t airlock_shell_ensure_dirs(void)
 {
-    cellar_shell_var_t v;
+    airlock_shell_var_t v;
     char sys32[640], fonts[640], desktop[640], dos[640];
     if (!g_inited)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    for (v = 0; v < CELLAR_ENV_COUNT; v++) {
-        if (v == CELLAR_ENV_HOMEDRIVE || v == CELLAR_ENV_HOMEPATH)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    for (v = 0; v < AIRLOCK_ENV_COUNT; v++) {
+        if (v == AIRLOCK_ENV_HOMEDRIVE || v == AIRLOCK_ENV_HOMEPATH)
             continue;
-        if (cellar_mkdir_p(g_paths[v]) != 0)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+        if (airlock_mkdir_p(g_paths[v]) != 0)
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
-    cellar_path_join(sys32, sizeof sys32, g_paths[CELLAR_ENV_WINDIR], "system32");
-    cellar_path_join(fonts, sizeof fonts, g_paths[CELLAR_ENV_WINDIR], "fonts");
-    cellar_path_join(desktop, sizeof desktop, g_paths[CELLAR_ENV_USERPROFILE],
+    airlock_path_join(sys32, sizeof sys32, g_paths[AIRLOCK_ENV_WINDIR], "system32");
+    airlock_path_join(fonts, sizeof fonts, g_paths[AIRLOCK_ENV_WINDIR], "fonts");
+    airlock_path_join(desktop, sizeof desktop, g_paths[AIRLOCK_ENV_USERPROFILE],
                      "Desktop");
-    cellar_path_join(dos, sizeof dos, g_bottle, "dosdevices");
-    cellar_mkdir_p(sys32);
-    cellar_mkdir_p(fonts);
-    cellar_mkdir_p(desktop);
-    cellar_mkdir_p(dos);
-    return CELLAR_OK;
+    airlock_path_join(dos, sizeof dos, g_bottle, "dosdevices");
+    airlock_mkdir_p(sys32);
+    airlock_mkdir_p(fonts);
+    airlock_mkdir_p(desktop);
+    airlock_mkdir_p(dos);
+    return AIRLOCK_OK;
 }
 
-const char *cellar_shell_get(cellar_shell_var_t v)
+const char *airlock_shell_get(airlock_shell_var_t v)
 {
-    if (!g_inited || v >= CELLAR_ENV_COUNT)
+    if (!g_inited || v >= AIRLOCK_ENV_COUNT)
         return "";
     return g_paths[v];
 }
 
-const char *cellar_shell_name(cellar_shell_var_t v)
+const char *airlock_shell_name(airlock_shell_var_t v)
 {
-    if (v >= CELLAR_ENV_COUNT)
+    if (v >= AIRLOCK_ENV_COUNT)
         return "";
     return k_names[v];
 }
 
-const char *cellar_shell_bottle(void)
+const char *airlock_shell_bottle(void)
 {
     return g_bottle;
 }
 
 static const char *lookup_var(const char *name, size_t n)
 {
-    cellar_shell_var_t v;
-    for (v = 0; v < CELLAR_ENV_COUNT; v++) {
+    airlock_shell_var_t v;
+    for (v = 0; v < AIRLOCK_ENV_COUNT; v++) {
         if (strlen(k_names[v]) == n && strncasecmp(k_names[v], name, n) == 0)
             return g_paths[v];
     }
     return NULL;
 }
 
-cellar_status_t cellar_shell_expand(const char *in, char *out, size_t cap)
+airlock_status_t airlock_shell_expand(const char *in, char *out, size_t cap)
 {
     size_t o = 0;
     const char *p;
     if (!in || !out || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (!g_inited)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     out[0] = '\0';
     for (p = in; *p && o + 1 < cap; ) {
         if (*p == '%') {
@@ -138,5 +138,5 @@ cellar_status_t cellar_shell_expand(const char *in, char *out, size_t cap)
         out[o++] = *p++;
     }
     out[o] = '\0';
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }

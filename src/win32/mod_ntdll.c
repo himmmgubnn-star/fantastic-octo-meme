@@ -6,9 +6,9 @@
 #include <stdint.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/compat.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/compat.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -29,9 +29,9 @@ typedef struct rtl_osversioninfo {
     char  szCSDVersion[128];
 } rtl_osversioninfo_t;
 
-static NTSTATUS WINAPI cellar_RtlGetVersion(rtl_osversioninfo_t *vi)
+static NTSTATUS WINAPI airlock_RtlGetVersion(rtl_osversioninfo_t *vi)
 {
-    const cellar_version_profile_t *p = cellar_version_profile(CELLAR_WIN_10);
+    const airlock_version_profile_t *p = airlock_version_profile(AIRLOCK_WIN_10);
     if (!vi)
         return (NTSTATUS)0xC0000001L; /* STATUS_UNSUCCESSFUL */
     vi->dwMajorVersion = p->major;
@@ -42,7 +42,7 @@ static NTSTATUS WINAPI cellar_RtlGetVersion(rtl_osversioninfo_t *vi)
     return 0; /* STATUS_SUCCESS */
 }
 
-static NTSTATUS WINAPI cellar_NtQueryInformationProcess(void *proc, ULONG cls,
+static NTSTATUS WINAPI airlock_NtQueryInformationProcess(void *proc, ULONG cls,
                                                         void *info, ULONG len,
                                                         ULONG *retlen)
 {
@@ -52,13 +52,13 @@ static NTSTATUS WINAPI cellar_NtQueryInformationProcess(void *proc, ULONG cls,
     return (NTSTATUS)0xC0000002L; /* STATUS_NOT_IMPLEMENTED */
 }
 
-static const cellar_export_entry_t k_exports[] = {
-    { "RtlGetVersion",              (void *)&cellar_RtlGetVersion },
-    { "NtQueryInformationProcess",  (void *)&cellar_NtQueryInformationProcess },
+static const airlock_export_entry_t k_exports[] = {
+    { "RtlGetVersion",              (void *)&airlock_RtlGetVersion },
+    { "NtQueryInformationProcess",  (void *)&airlock_NtQueryInformationProcess },
 };
 
-static const cellar_module_t k_mod = {
+static const airlock_module_t k_mod = {
     "ntdll.dll", k_exports, sizeof k_exports / sizeof k_exports[0]
 };
 
-const cellar_module_t *cellar_win32_module_ntdll(void) { return &k_mod; }
+const airlock_module_t *airlock_win32_module_ntdll(void) { return &k_mod; }

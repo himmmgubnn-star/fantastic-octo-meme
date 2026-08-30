@@ -1,6 +1,6 @@
-# Cellar Roadmap
+# Airlock Roadmap
 
-Cellar is built bottom-up: first read Windows executables, then give them an
+Airlock is built bottom-up: first read Windows executables, then give them an
 OS to run on, then let them execute. Each milestone is independently useful.
 
 Legend: ✅ done · 🔶 in progress · ⬜ planned
@@ -72,15 +72,15 @@ several Windows toolchains run unmodified.
 > **Goal:** run anywhere, run fast, and make sound. Two cross-cutting subsystems
 > that every Windows program needs.
 
-- ✅ **Portability layer** (`include/cellar/platform.h`, `src/port/posix.c`)
+- ✅ **Portability layer** (`include/airlock/platform.h`, `src/port/posix.c`)
   - Works on **Linux and Android** (both ship the POSIX surface)
   - Monotonic clock, `nanosleep`, perf counter, `FILETIME` system time
   - pid/tid, zero-copy `mmap` file reads
-- ✅ **Audio subsystem** (`include/cellar/audio.h`, `src/audio/`)
+- ✅ **Audio subsystem** (`include/airlock/audio.h`, `src/audio/`)
   - Backend abstraction → WAV file sink (dependency-free, default) | ALSA | null
   - `WINMM.dll` (winmm) module: `waveOut*`, `PlaySoundA`, `timeGetTime`
   - Games' audio routes through the backend, never touching hardware directly
-- ✅ **Performance kit** (`include/cellar/perf.h`, `src/perf/`)
+- ✅ **Performance kit** (`include/airlock/perf.h`, `src/perf/`)
   - Counters, tunables (`--papi`, mmap threshold, large pages), tracing ring
   - mmap-backed zero-copy file loading; optional page pre-faulting (`--papi=1`)
   - high-performance scheduling hint
@@ -91,7 +91,7 @@ several Windows toolchains run unmodified.
 
 > **Goal:** diagnose, remember, and optimize real Windows software.
 
-- ✅ **Application Compatibility Analyzer** — `cellar analyze game.exe`:
+- ✅ **Application Compatibility Analyzer** — `airlock analyze game.exe`:
   per-subsystem scoring vs the API database, missing-API diagnostics, issue
   detection, config recommendations
 - ✅ **Per-application compatibility profiles** — persisted per-app config
@@ -116,19 +116,19 @@ several Windows toolchains run unmodified.
 > for real applications, not just games: inspect, remember, isolate, measure,
 > and speak COM/shell.
 
-- ✅ **Application Inspector** — `cellar inspect game.exe`: architecture,
+- ✅ **Application Inspector** — `airlock inspect game.exe`: architecture,
   imported DLLs, exports, TLS, resources, manifests, COM/CLR, delay-loads,
   .NET / VC runtime requirements, detected graphics/audio/input/net
 - ✅ **Compatibility database** — persistent catalog of app requirements +
-  HIGH/MEDIUM/LOW rating + known issues (`cellar db list|show`)
-- ✅ **Prefix / environment manager** — `cellar prefix create|launch|backup|
+  HIGH/MEDIUM/LOW rating + known issues (`airlock db list|show`)
+- ✅ **Prefix / environment manager** — `airlock prefix create|launch|backup|
   restore|delete`; each bottle has its own `drive_c`, version mode, gfx/audio
 - ✅ **Windows shell mapping** — `%APPDATA%`, `%LOCALAPPDATA%`, `%PROGRAMDATA%`,
   `%TEMP%`, `%USERPROFILE%`, `%WINDIR%` → prefix `drive_c`
-- ✅ **Runtime manager** — `cellar runtime install vcruntime|dotnet|…`
-- ✅ **Compatibility test lab** — `cellar test` (kernel32/user32/ntdll/COM/…);
+- ✅ **Runtime manager** — `airlock runtime install vcruntime|dotnet|…`
+- ✅ **Compatibility test lab** — `airlock test` (kernel32/user32/ntdll/COM/…);
   grows automatically with every registered Win32 export
-- ✅ **Compatibility debugger** — `cellar debug game.exe`
+- ✅ **Compatibility debugger** — `airlock debug game.exe`
 - ✅ **Win32 API layers** — independent modules: kernel32, ntdll, user32,
   advapi32, shell32, ole32, comdlg32, gdi32, ws2_32, version, winmm
 - ✅ **COM / OLE** — IUnknown, GUIDs, refcounting, class registration,
@@ -141,26 +141,26 @@ several Windows toolchains run unmodified.
 - ✅ **Installer journal** — registry/shortcut/env/file actions + uninstall
 - ✅ **Services** — user-space service manager (never touches systemd)
 - ✅ **Locale / i18n** — CP1252/437/UTF-8, LCID, date/number format
-- ✅ **Printing** — virtual "Cellar PDF" printer → PostScript job files
+- ✅ **Printing** — virtual "Airlock PDF" printer → PostScript job files
 - ✅ **Devices + accessibility** — device registry; MSAA-shaped a11y tree
 - ⬜ **Milestone 1 (execution)** still the next *runtime* step — see below
 
-## Milestone 4.9 — Winaltor application workspace layer (current)
+## Milestone 4.9 — Airlock application workspace layer (current)
 
 > **Goal:** the product layer users interact with: one workspace per app, an
 > app library, and the reliability workflow (profiles, rollback, diagnosis).
 
-- ✅ **One workspace per app** — `cellar app add/list/show/remove`, a real
+- ✅ **One workspace per app** — `airlock app add/list/show/remove`, a real
   isolated prefix per application
 - ✅ **Guided setup** — `exe`, `msi` (metadata/journal), `import`, `portable`
 - ✅ **App library** — tags, favorites, size, runner, compatibility rating
 - ✅ **Versioned compatibility profiles** — YAML export/import, executable
   hash, current profile, `profile list|show|apply|export|import`
-- ✅ **Config diff** — `cellar app diff NAME A B`
-- ✅ **One-click snapshot/rollback** — `cellar app snapshot/rollback`
-- ✅ **Repair mode** — `cellar app repair`
-- ✅ **Launch doctor** — `cellar app doctor`
-- ✅ **Readable logs / support bundle** — `cellar app diagnose`, `app support`
+- ✅ **Config diff** — `airlock app diff NAME A B`
+- ✅ **One-click snapshot/rollback** — `airlock app snapshot/rollback`
+- ✅ **Repair mode** — `airlock app repair`
+- ✅ **Launch doctor** — `airlock app doctor`
+- ✅ **Readable logs / support bundle** — `airlock app diagnose`, `app support`
 - ✅ **Permissions / safety dashboard** — `app permissions`, `app safety`
 - ✅ **Per-app performance modes, controls, resolution, shader cache**
 - ✅ **Device capability report + container alias** — `device report`,

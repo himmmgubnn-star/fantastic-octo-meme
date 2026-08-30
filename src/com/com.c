@@ -8,18 +8,18 @@
 #include <string.h>
 #include <strings.h>
 
-#include "cellar/cellar.h"
-#include "cellar/com.h"
+#include "airlock/airlock.h"
+#include "airlock/com.h"
 
-const cellar_guid_t CELLAR_IID_IUNKNOWN = {
+const airlock_guid_t AIRLOCK_IID_IUNKNOWN = {
     0x00000000, 0x0000, 0x0000, { 0xC0, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x46 }
 };
 
-const cellar_guid_t CELLAR_CLSID_NULL = {
+const airlock_guid_t AIRLOCK_CLSID_NULL = {
     0x43454c4c, 0x4152, 0x0001, { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 }
 };
 
-int cellar_guid_eq(const cellar_guid_t *a, const cellar_guid_t *b)
+int airlock_guid_eq(const airlock_guid_t *a, const airlock_guid_t *b)
 {
     return a && b && memcmp(a, b, sizeof *a) == 0;
 }
@@ -47,12 +47,12 @@ static uint32_t hex_run(const char **ps, int nibbles)
     return v;
 }
 
-cellar_status_t cellar_guid_parse(const char *s, cellar_guid_t *out)
+airlock_status_t airlock_guid_parse(const char *s, airlock_guid_t *out)
 {
     const char *p;
     int i;
     if (!s || !out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     p = s;
     if (*p == '{') p++;
     memset(out, 0, sizeof *out);
@@ -67,10 +67,10 @@ cellar_status_t cellar_guid_parse(const char *s, cellar_guid_t *out)
     if (*p == '-') p++;
     for (i = 2; i < 8; i++)
         out->data4[i] = (uint8_t)hex_run(&p, 2);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_guid_format(const cellar_guid_t *g, char *dst, size_t n)
+void airlock_guid_format(const airlock_guid_t *g, char *dst, size_t n)
 {
     if (!g || !dst || n == 0)
         return;
@@ -81,18 +81,18 @@ void cellar_guid_format(const cellar_guid_t *g, char *dst, size_t n)
              g->data4[4], g->data4[5], g->data4[6], g->data4[7]);
 }
 
-static int iu_qi(cellar_iunknown_t *self, const cellar_guid_t *iid, void **out)
+static int iu_qi(airlock_iunknown_t *self, const airlock_guid_t *iid, void **out)
 {
     if (!self || !iid || !out)
         return 1;
-    if (!cellar_guid_eq(iid, &CELLAR_IID_IUNKNOWN))
+    if (!airlock_guid_eq(iid, &AIRLOCK_IID_IUNKNOWN))
         return 1;
     self->vtbl->add_ref(self);
     *out = self;
     return 0;
 }
 
-static uint32_t iu_addref(cellar_iunknown_t *self)
+static uint32_t iu_addref(airlock_iunknown_t *self)
 {
     if (!self)
         return 0;
@@ -100,7 +100,7 @@ static uint32_t iu_addref(cellar_iunknown_t *self)
     return self->refs;
 }
 
-static uint32_t iu_release(cellar_iunknown_t *self)
+static uint32_t iu_release(airlock_iunknown_t *self)
 {
     if (!self)
         return 0;
@@ -114,68 +114,68 @@ static uint32_t iu_release(cellar_iunknown_t *self)
     return self->refs;
 }
 
-static const cellar_iunknown_vtbl_t k_iu_vtbl = {
+static const airlock_iunknown_vtbl_t k_iu_vtbl = {
     iu_qi, iu_addref, iu_release
 };
 
-const cellar_iunknown_vtbl_t *cellar_iunknown_vtbl(void)
+const airlock_iunknown_vtbl_t *airlock_iunknown_vtbl(void)
 {
     return &k_iu_vtbl;
 }
 
 static _Thread_local int g_inited;
-static _Thread_local cellar_apt_t g_apt;
+static _Thread_local airlock_apt_t g_apt;
 
 typedef struct class_ent {
-    cellar_guid_t clsid;
+    airlock_guid_t clsid;
     char progid[64];
-    cellar_com_factory_t fac;
+    airlock_com_factory_t fac;
     int used;
 } class_ent_t;
 
 static class_ent_t g_classes[32];
 
-cellar_status_t cellar_com_init(cellar_apt_t apt)
+airlock_status_t airlock_com_init(airlock_apt_t apt)
 {
     if (g_inited) {
         if (g_apt != apt)
-            return CELLAR_ERR_INVALID_ARGUMENT; /* RPC_E_CHANGED_MODE */
-        return CELLAR_OK; /* S_FALSE equivalent: already initialized */
+            return AIRLOCK_ERR_INVALID_ARGUMENT; /* RPC_E_CHANGED_MODE */
+        return AIRLOCK_OK; /* S_FALSE equivalent: already initialized */
     }
     g_apt = apt;
     g_inited = 1;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_com_uninit(void)
+void airlock_com_uninit(void)
 {
     g_inited = 0;
 }
 
-int cellar_com_inited(void)
+int airlock_com_inited(void)
 {
     return g_inited;
 }
 
-cellar_apt_t cellar_com_apt(void)
+airlock_apt_t airlock_com_apt(void)
 {
     return g_apt;
 }
 
-cellar_status_t cellar_com_register_class(const cellar_guid_t *clsid,
+airlock_status_t airlock_com_register_class(const airlock_guid_t *clsid,
                                           const char *progid,
-                                          cellar_com_factory_t fac)
+                                          airlock_com_factory_t fac)
 {
     size_t i;
     if (!clsid || !fac)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     for (i = 0; i < 32; i++) {
-        if (g_classes[i].used && cellar_guid_eq(&g_classes[i].clsid, clsid)) {
+        if (g_classes[i].used && airlock_guid_eq(&g_classes[i].clsid, clsid)) {
             g_classes[i].fac = fac;
             if (progid)
                 snprintf(g_classes[i].progid, sizeof g_classes[i].progid, "%s",
                          progid);
-            return CELLAR_OK;
+            return AIRLOCK_OK;
         }
     }
     for (i = 0; i < 32; i++) {
@@ -185,84 +185,84 @@ cellar_status_t cellar_com_register_class(const cellar_guid_t *clsid,
             g_classes[i].used = 1;
             snprintf(g_classes[i].progid, sizeof g_classes[i].progid, "%s",
                      progid ? progid : "");
-            return CELLAR_OK;
+            return AIRLOCK_OK;
         }
     }
-    return CELLAR_ERR_OUT_OF_MEMORY;
+    return AIRLOCK_ERR_OUT_OF_MEMORY;
 }
 
-cellar_status_t cellar_com_create(const cellar_guid_t *clsid,
-                                  const cellar_guid_t *iid, void **out)
+airlock_status_t airlock_com_create(const airlock_guid_t *clsid,
+                                  const airlock_guid_t *iid, void **out)
 {
     size_t i;
     void *obj = NULL;
-    cellar_status_t st;
+    airlock_status_t st;
     if (!clsid || !out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (!g_inited)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     *out = NULL;
     for (i = 0; i < 32; i++) {
-        if (!g_classes[i].used || !cellar_guid_eq(&g_classes[i].clsid, clsid))
+        if (!g_classes[i].used || !airlock_guid_eq(&g_classes[i].clsid, clsid))
             continue;
         st = g_classes[i].fac(&obj);
-        if (st != CELLAR_OK)
+        if (st != AIRLOCK_OK)
             return st;
         if (iid && obj) {
-            cellar_iunknown_t *iu = (cellar_iunknown_t *)obj;
+            airlock_iunknown_t *iu = (airlock_iunknown_t *)obj;
             void *qi = NULL;
             if (iu->vtbl->query_interface(iu, iid, &qi) != 0) {
                 iu->vtbl->release(iu);
-                return CELLAR_ERR_NOT_IMPLEMENTED;
+                return AIRLOCK_ERR_NOT_IMPLEMENTED;
             }
             *out = qi;
-            return CELLAR_OK;
+            return AIRLOCK_OK;
         }
         *out = obj;
-        return CELLAR_OK;
+        return AIRLOCK_OK;
     }
-    return CELLAR_ERR_NOT_IMPLEMENTED;
+    return AIRLOCK_ERR_NOT_IMPLEMENTED;
 }
 
-cellar_status_t cellar_com_marshal(cellar_iunknown_t *obj,
+airlock_status_t airlock_com_marshal(airlock_iunknown_t *obj,
                                    uint8_t *buf, size_t cap, size_t *out_len)
 {
     uintptr_t p;
     if (!obj || !buf || cap < 4 + sizeof p)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memcpy(buf, "COM1", 4);
     p = (uintptr_t)obj;
     memcpy(buf + 4, &p, sizeof p);
     if (out_len)
         *out_len = 4 + sizeof p;
     obj->vtbl->add_ref(obj);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_com_unmarshal(const uint8_t *buf, size_t len,
-                                     cellar_iunknown_t **out)
+airlock_status_t airlock_com_unmarshal(const uint8_t *buf, size_t len,
+                                     airlock_iunknown_t **out)
 {
     uintptr_t p = 0;
     if (!buf || !out || len < 4 + sizeof p || memcmp(buf, "COM1", 4) != 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memcpy(&p, buf + 4, sizeof p);
-    *out = (cellar_iunknown_t *)p;
-    return CELLAR_OK;
+    *out = (airlock_iunknown_t *)p;
+    return AIRLOCK_OK;
 }
 
-static cellar_status_t null_factory(void **out)
+static airlock_status_t null_factory(void **out)
 {
-    cellar_iunknown_t *o = calloc(1, sizeof *o);
+    airlock_iunknown_t *o = calloc(1, sizeof *o);
     if (!o)
-        return CELLAR_ERR_OUT_OF_MEMORY;
-    o->vtbl = cellar_iunknown_vtbl();
+        return AIRLOCK_ERR_OUT_OF_MEMORY;
+    o->vtbl = airlock_iunknown_vtbl();
     o->refs = 1;
     *out = o;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_com_register_builtins(void)
+airlock_status_t airlock_com_register_builtins(void)
 {
-    return cellar_com_register_class(&CELLAR_CLSID_NULL, "Cellar.Null",
+    return airlock_com_register_class(&AIRLOCK_CLSID_NULL, "Airlock.Null",
                                      null_factory);
 }

@@ -6,8 +6,8 @@
 #include <stdio.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/locale.h"
+#include "airlock/airlock.h"
+#include "airlock/locale.h"
 
 /* Windows-1252 C1 range (0x80..0x9F) → Unicode. */
 static const uint16_t k_cp1252_80[32] = {
@@ -17,17 +17,17 @@ static const uint16_t k_cp1252_80[32] = {
     0x02DC, 0x2122, 0x0161, 0x203A, 0x0153, 0x009D, 0x017E, 0x0178
 };
 
-static cellar_locale_t g_loc;
+static airlock_locale_t g_loc;
 static int g_have;
 
-void cellar_locale_english_us(cellar_locale_t *l)
+void airlock_locale_english_us(airlock_locale_t *l)
 {
     if (!l)
         return;
     memset(l, 0, sizeof *l);
     l->lcid = 0x0409;
-    l->acp = CELLAR_CP_1252;
-    l->oemcp = CELLAR_CP_437;
+    l->acp = AIRLOCK_CP_1252;
+    l->oemcp = AIRLOCK_CP_437;
     snprintf(l->language, sizeof l->language, "en");
     snprintf(l->country, sizeof l->country, "US");
     snprintf(l->date_fmt, sizeof l->date_fmt, "MM/dd/yyyy");
@@ -40,12 +40,12 @@ void cellar_locale_english_us(cellar_locale_t *l)
 static void ensure(void)
 {
     if (!g_have) {
-        cellar_locale_english_us(&g_loc);
+        airlock_locale_english_us(&g_loc);
         g_have = 1;
     }
 }
 
-void cellar_locale_set(const cellar_locale_t *l)
+void airlock_locale_set(const airlock_locale_t *l)
 {
     if (!l)
         return;
@@ -53,40 +53,40 @@ void cellar_locale_set(const cellar_locale_t *l)
     g_have = 1;
 }
 
-const cellar_locale_t *cellar_locale_get(void)
+const airlock_locale_t *airlock_locale_get(void)
 {
     ensure();
     return &g_loc;
 }
 
-cellar_status_t cellar_locale_format_date(const struct tm *t,
+airlock_status_t airlock_locale_format_date(const struct tm *t,
                                           char *out, size_t cap)
 {
     if (!t || !out || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ensure();
     snprintf(out, cap, "%02d/%02d/%04d",
              t->tm_mon + 1, t->tm_mday, t->tm_year + 1900);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_locale_format_time(const struct tm *t,
+airlock_status_t airlock_locale_format_time(const struct tm *t,
                                           char *out, size_t cap)
 {
     if (!t || !out || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     snprintf(out, cap, "%02d:%02d:%02d", t->tm_hour, t->tm_min, t->tm_sec);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_locale_format_number(double n, char *out, size_t cap)
+airlock_status_t airlock_locale_format_number(double n, char *out, size_t cap)
 {
     char raw[64], grouped[80];
     char *dot, *p, *g;
     int digits, i;
     ensure();
     if (!out || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     snprintf(raw, sizeof raw, "%.2f", n);
     dot = strchr(raw, '.');
     digits = dot ? (int)(dot - raw) : (int)strlen(raw);
@@ -109,7 +109,7 @@ cellar_status_t cellar_locale_format_number(double n, char *out, size_t cap)
     }
     *g = '\0';
     snprintf(out, cap, "%s", grouped);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 static size_t utf8_put(char *out, size_t cap, size_t o, uint32_t cp)
@@ -134,29 +134,29 @@ static size_t utf8_put(char *out, size_t cap, size_t o, uint32_t cp)
 
 static uint32_t map_cp(uint32_t cp, uint8_t b)
 {
-    if (cp == CELLAR_CP_ACP)
-        cp = cellar_locale_get()->acp;
-    if (cp == CELLAR_CP_OEMCP)
-        cp = cellar_locale_get()->oemcp;
-    if (cp == CELLAR_CP_UTF8 || cp == 65001)
+    if (cp == AIRLOCK_CP_ACP)
+        cp = airlock_locale_get()->acp;
+    if (cp == AIRLOCK_CP_OEMCP)
+        cp = airlock_locale_get()->oemcp;
+    if (cp == AIRLOCK_CP_UTF8 || cp == 65001)
         return b;
-    if (cp == CELLAR_CP_1252) {
+    if (cp == AIRLOCK_CP_1252) {
         if (b >= 0x80 && b <= 0x9F)
             return k_cp1252_80[b - 0x80];
         return b;
     }
-    if (cp == CELLAR_CP_437)
+    if (cp == AIRLOCK_CP_437)
         return b; /* identity for 0x00-0x7F; high bytes kept as-is for tests */
     return b;
 }
 
-int cellar_cp_to_utf8(uint32_t cp, const uint8_t *in, size_t n,
+int airlock_cp_to_utf8(uint32_t cp, const uint8_t *in, size_t n,
                       char *out, size_t cap)
 {
     size_t i, o = 0;
     if (!in || !out || cap == 0)
         return -1;
-    if (cp == CELLAR_CP_UTF8 || cp == 65001) {
+    if (cp == AIRLOCK_CP_UTF8 || cp == 65001) {
         size_t cpy = n < cap - 1 ? n : cap - 1;
         memcpy(out, in, cpy);
         out[cpy] = '\0';
@@ -172,14 +172,14 @@ int cellar_cp_to_utf8(uint32_t cp, const uint8_t *in, size_t n,
     return (int)o;
 }
 
-int cellar_utf8_to_cp(uint32_t cp, const char *in, uint8_t *out, size_t cap)
+int airlock_utf8_to_cp(uint32_t cp, const char *in, uint8_t *out, size_t cap)
 {
     size_t i, o = 0;
     if (!in || !out || cap == 0)
         return -1;
-    if (cp == CELLAR_CP_ACP)
-        cp = cellar_locale_get()->acp;
-    if (cp == CELLAR_CP_UTF8 || cp == 65001) {
+    if (cp == AIRLOCK_CP_ACP)
+        cp = airlock_locale_get()->acp;
+    if (cp == AIRLOCK_CP_UTF8 || cp == 65001) {
         size_t n = strlen(in);
         size_t cpy = n < cap ? n : cap - 1;
         memcpy(out, in, cpy);
@@ -214,9 +214,9 @@ int cellar_utf8_to_cp(uint32_t cp, const char *in, uint8_t *out, size_t cap)
                 i++;
                 continue;
             }
-            if (cp == CELLAR_CP_1252 && u >= 0x80 && u <= 0xFF) {
+            if (cp == AIRLOCK_CP_1252 && u >= 0x80 && u <= 0xFF) {
                 out[o++] = (uint8_t)u;
-            } else if (cp == CELLAR_CP_1252) {
+            } else if (cp == AIRLOCK_CP_1252) {
                 int k, found = 0;
                 for (k = 0; k < 32; k++)
                     if (k_cp1252_80[k] == (uint16_t)u) {

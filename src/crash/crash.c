@@ -20,17 +20,17 @@
 #include <sys/syscall.h>
 #endif
 
-#include "cellar/cellar.h"
-#include "cellar/crash.h"
-#include "cellar/platform.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/crash.h"
+#include "airlock/platform.h"
+#include "airlock/win32.h"
 
 /* ---- Thread-local current-API hook ---------------------------------------- */
 
 static _Thread_local char t_api[256];
 static _Thread_local char t_subsystem[64];
 
-void cellar_crash_set_current_api(const char *subsystem, const char *api)
+void airlock_crash_set_current_api(const char *subsystem, const char *api)
 {
     if (subsystem)
         snprintf(t_subsystem, sizeof t_subsystem, "%s", subsystem);
@@ -40,18 +40,18 @@ void cellar_crash_set_current_api(const char *subsystem, const char *api)
 
 /* ---- Crash info ----------------------------------------------------------- */
 
-static cellar_crash_info_t g_last;
+static airlock_crash_info_t g_last;
 
-const cellar_crash_info_t *cellar_crash_last(void) { return &g_last; }
+const airlock_crash_info_t *airlock_crash_last(void) { return &g_last; }
 
 static void list_dlls(char *out, size_t cap)
 {
     size_t i, n;
-    const cellar_module_t *m;
+    const airlock_module_t *m;
     size_t pos = 0;
-    n = cellar_win32_module_count();
+    n = airlock_win32_module_count();
     for (i = 0; i < n; i++) {
-        m = cellar_win32_module_at(i);
+        m = airlock_win32_module_at(i);
         if (!m)
             continue;
         pos += (size_t)snprintf(out + pos, cap - pos, "%s%s",
@@ -61,7 +61,7 @@ static void list_dlls(char *out, size_t cap)
     }
 }
 
-void cellar_crash_fill(cellar_crash_info_t *out, uint32_t signal,
+void airlock_crash_fill(airlock_crash_info_t *out, uint32_t signal,
                        uintptr_t fault_addr)
 {
     if (!out)
@@ -69,7 +69,7 @@ void cellar_crash_fill(cellar_crash_info_t *out, uint32_t signal,
     memset(out, 0, sizeof *out);
     out->signal = signal;
     out->fault_addr = fault_addr;
-    out->thread_id = cellar_gettid();
+    out->thread_id = airlock_gettid();
     if (t_subsystem[0])
         snprintf(out->subsystem, sizeof out->subsystem, "%s", t_subsystem);
     if (t_api[0])
@@ -83,19 +83,19 @@ void cellar_crash_fill(cellar_crash_info_t *out, uint32_t signal,
 static void on_fatal_signal(int sig, siginfo_t *si, void *uc)
 {
     (void)uc;
-    cellar_crash_fill(&g_last, (uint32_t)sig,
+    airlock_crash_fill(&g_last, (uint32_t)sig,
                       (uintptr_t)(si ? si->si_addr : NULL));
     /* Print a structured report to stderr, then re-raise with default. */
     {
         char buf[2048];
-        cellar_crash_format(&g_last, buf, sizeof buf);
+        airlock_crash_format(&g_last, buf, sizeof buf);
         fputs(buf, stderr);
     }
     signal(sig, SIG_DFL);
     raise(sig);
 }
 
-cellar_status_t cellar_crash_register_handler(void)
+airlock_status_t airlock_crash_register_handler(void)
 {
     struct sigaction sa;
     memset(&sa, 0, sizeof sa);
@@ -103,14 +103,14 @@ cellar_status_t cellar_crash_register_handler(void)
     sa.sa_flags = SA_SIGINFO;
     sigemptyset(&sa.sa_mask);
     if (sigaction(SIGSEGV, &sa, NULL) != 0)
-        return CELLAR_ERR_NOT_IMPLEMENTED;
+        return AIRLOCK_ERR_NOT_IMPLEMENTED;
     if (sigaction(SIGABRT, &sa, NULL) != 0)
-        return CELLAR_ERR_NOT_IMPLEMENTED;
+        return AIRLOCK_ERR_NOT_IMPLEMENTED;
     if (sigaction(SIGBUS, &sa, NULL) != 0)
-        return CELLAR_ERR_NOT_IMPLEMENTED;
+        return AIRLOCK_ERR_NOT_IMPLEMENTED;
     if (sigaction(SIGFPE, &sa, NULL) != 0)
-        return CELLAR_ERR_NOT_IMPLEMENTED;
-    return CELLAR_OK;
+        return AIRLOCK_ERR_NOT_IMPLEMENTED;
+    return AIRLOCK_OK;
 }
 
 static const char *signal_name(uint32_t s)
@@ -124,7 +124,7 @@ static const char *signal_name(uint32_t s)
     }
 }
 
-void cellar_crash_format(const cellar_crash_info_t *ci, char *buf, size_t cap)
+void airlock_crash_format(const airlock_crash_info_t *ci, char *buf, size_t cap)
 {
     if (!ci || !buf)
         return;

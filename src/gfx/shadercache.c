@@ -2,7 +2,7 @@
  * shadercache.c — persistent shader pipeline cache.
  *
  * On-disk layout:
- *   header   CELLAR_SHADERCACHE_MAGIC | version | env{gpu,driver,api,flags}
+ *   header   AIRLOCK_SHADERCACHE_MAGIC | version | env{gpu,driver,api,flags}
  *            | entry_count
  *   entry    key(u64) | size(u32) | blob[size]
  *
@@ -17,12 +17,12 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "cellar/cellar.h"
-#include "cellar/shadercache.h"
+#include "airlock/airlock.h"
+#include "airlock/shadercache.h"
 
 static int le_write(FILE *fp, const void *p, size_t n) { return fwrite(p, 1, n, fp) == n; }
 
-static cellar_status_t write_env(FILE *fp, const cellar_shader_env_t *e)
+static airlock_status_t write_env(FILE *fp, const airlock_shader_env_t *e)
 {
     unsigned char h[8 + 8 + 4 + 4];
     size_t i;
@@ -33,7 +33,7 @@ static cellar_status_t write_env(FILE *fp, const cellar_shader_env_t *e)
     return le_write(fp, h, sizeof h);
 }
 
-static void read_env(FILE *fp, cellar_shader_env_t *e)
+static void read_env(FILE *fp, airlock_shader_env_t *e)
 {
     unsigned char h[24];
     size_t i;
@@ -48,16 +48,16 @@ static void read_env(FILE *fp, cellar_shader_env_t *e)
     for (i = 0; i < 4; i++) e->flags |= (uint32_t)h[20 + i] << (8 * i);
 }
 
-cellar_status_t cellar_shadercache_open(cellar_shadercache_t *c,
+airlock_status_t airlock_shadercache_open(airlock_shadercache_t *c,
                                         const char *path,
-                                        const cellar_shader_env_t *env)
+                                        const airlock_shader_env_t *env)
 {
     unsigned char hdr[8 + 8];
     FILE *fp;
     int match = 0;
 
     if (!c || !path || !env)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(c, 0, sizeof *c);
     snprintf(c->path, sizeof c->path, "%s", path);
     c->env = *env;
@@ -65,11 +65,11 @@ cellar_status_t cellar_shadercache_open(cellar_shadercache_t *c,
     fp = fopen(path, "r+b");
     if (fp) {
         /* read magic + version + env */
-        cellar_shader_env_t fenv;
+        airlock_shader_env_t fenv;
         if (fread(hdr, 1, 8, fp) == 8) {
             uint64_t magic = 0; size_t i;
             for (i = 0; i < 8; i++) magic |= (uint64_t)hdr[i] << (8 * i);
-            if (magic == CELLAR_SHADERCACHE_MAGIC && hdr[7] == CELLAR_SHADERCACHE_VERSION) {
+            if (magic == AIRLOCK_SHADERCACHE_MAGIC && hdr[7] == AIRLOCK_SHADERCACHE_VERSION) {
                 read_env(fp, &fenv);
                 match = (fenv.gpu_id == env->gpu_id &&
                          fenv.driver_id == env->driver_id &&
@@ -87,13 +87,13 @@ cellar_status_t cellar_shadercache_open(cellar_shadercache_t *c,
     if (!match) {
         fp = fopen(path, "wb");
         if (!fp)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         {
             unsigned char m[8];
             size_t i;
             for (i = 0; i < 8; i++)
-                m[i] = (unsigned char)((CELLAR_SHADERCACHE_MAGIC >> (8 * i)) & 0xFF);
-            m[7] = CELLAR_SHADERCACHE_VERSION;
+                m[i] = (unsigned char)((AIRLOCK_SHADERCACHE_MAGIC >> (8 * i)) & 0xFF);
+            m[7] = AIRLOCK_SHADERCACHE_VERSION;
             le_write(fp, m, 8);
         }
         write_env(fp, env);
@@ -110,12 +110,12 @@ cellar_status_t cellar_shadercache_open(cellar_shadercache_t *c,
 
     fp = fopen(path, "ab");
     if (!fp)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     c->fp = fp;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-size_t cellar_shadercache_lookup(const cellar_shadercache_t *c, uint64_t key,
+size_t airlock_shadercache_lookup(const airlock_shadercache_t *c, uint64_t key,
                                  void *blob, size_t cap)
 {
     FILE *fp;
@@ -148,27 +148,27 @@ size_t cellar_shadercache_lookup(const cellar_shadercache_t *c, uint64_t key,
     return found;
 }
 
-cellar_status_t cellar_shadercache_insert(cellar_shadercache_t *c,
+airlock_status_t airlock_shadercache_insert(airlock_shadercache_t *c,
                                           uint64_t key,
                                           const void *blob, size_t len)
 {
     unsigned char kb[8], sb[4];
     size_t i;
     if (!c || !c->valid || !c->fp || !blob)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     for (i = 0; i < 8; i++) kb[i] = (unsigned char)((key >> (8 * i)) & 0xFF);
     for (i = 0; i < 4; i++) sb[i] = (unsigned char)((len >> (8 * i)) & 0xFF);
     if (fwrite(kb, 1, 8, c->fp) != 8 || fwrite(sb, 1, 4, c->fp) != 4 ||
         fwrite(blob, 1, len, c->fp) != len)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     c->entries++;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_shadercache_close(cellar_shadercache_t *c)
+airlock_status_t airlock_shadercache_close(airlock_shadercache_t *c)
 {
     if (!c)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (c->fp) {
         /* Update entry_count in the header (bytes 32..39). */
         fflush(c->fp);
@@ -188,10 +188,10 @@ cellar_status_t cellar_shadercache_close(cellar_shadercache_t *c)
         }
     }
     c->valid = 0;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-uint64_t cellar_shader_hash(const void *data, size_t len)
+uint64_t airlock_shader_hash(const void *data, size_t len)
 {
     const unsigned char *p = data;
     uint64_t h = 1469598103934665603ull;
@@ -203,7 +203,7 @@ uint64_t cellar_shader_hash(const void *data, size_t len)
     return h;
 }
 
-uint64_t cellar_shader_cache_key(uint64_t shader_hash, uint32_t salt)
+uint64_t airlock_shader_cache_key(uint64_t shader_hash, uint32_t salt)
 {
     return shader_hash ^ ((uint64_t)salt << 32);
 }

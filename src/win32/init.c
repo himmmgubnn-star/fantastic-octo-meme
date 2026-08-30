@@ -7,32 +7,32 @@
  *
  * SPDX-License-Identifier: MIT
  */
-#include "cellar/cellar.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/win32.h"
 
-const cellar_module_t *cellar_win32_module_kernel32(void);
-const cellar_module_t *cellar_win32_module_winmm(void);
-const cellar_module_t *cellar_win32_module_user32(void);
-const cellar_module_t *cellar_win32_module_advapi32(void);
-const cellar_module_t *cellar_win32_module_shell32(void);
-const cellar_module_t *cellar_win32_module_ole32(void);
-const cellar_module_t *cellar_win32_module_comdlg32(void);
-const cellar_module_t *cellar_win32_module_gdi32(void);
-const cellar_module_t *cellar_win32_module_ws2_32(void);
-const cellar_module_t *cellar_win32_module_version(void);
-const cellar_module_t *cellar_win32_module_ntdll(void);
+const airlock_module_t *airlock_win32_module_kernel32(void);
+const airlock_module_t *airlock_win32_module_winmm(void);
+const airlock_module_t *airlock_win32_module_user32(void);
+const airlock_module_t *airlock_win32_module_advapi32(void);
+const airlock_module_t *airlock_win32_module_shell32(void);
+const airlock_module_t *airlock_win32_module_ole32(void);
+const airlock_module_t *airlock_win32_module_comdlg32(void);
+const airlock_module_t *airlock_win32_module_gdi32(void);
+const airlock_module_t *airlock_win32_module_ws2_32(void);
+const airlock_module_t *airlock_win32_module_version(void);
+const airlock_module_t *airlock_win32_module_ntdll(void);
 
-void cellar_win32_init(void)
+void airlock_win32_init(void)
 {
-    cellar_win32_register_module(cellar_win32_module_kernel32());
-    cellar_win32_register_module(cellar_win32_module_ntdll());
-    cellar_win32_register_module(cellar_win32_module_user32());
-    cellar_win32_register_module(cellar_win32_module_advapi32());
-    cellar_win32_register_module(cellar_win32_module_shell32());
-    cellar_win32_register_module(cellar_win32_module_ole32());
-    cellar_win32_register_module(cellar_win32_module_comdlg32());
-    cellar_win32_register_module(cellar_win32_module_gdi32());
-    cellar_win32_register_module(cellar_win32_module_ws2_32());
-    cellar_win32_register_module(cellar_win32_module_version());
-    cellar_win32_register_module(cellar_win32_module_winmm());
+    airlock_win32_register_module(airlock_win32_module_kernel32());
+    airlock_win32_register_module(airlock_win32_module_ntdll());
+    airlock_win32_register_module(airlock_win32_module_user32());
+    airlock_win32_register_module(airlock_win32_module_advapi32());
+    airlock_win32_register_module(airlock_win32_module_shell32());
+    airlock_win32_register_module(airlock_win32_module_ole32());
+    airlock_win32_register_module(airlock_win32_module_comdlg32());
+    airlock_win32_register_module(airlock_win32_module_gdi32());
+    airlock_win32_register_module(airlock_win32_module_ws2_32());
+    airlock_win32_register_module(airlock_win32_module_version());
+    airlock_win32_register_module(airlock_win32_module_winmm());
 }

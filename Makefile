@@ -1,20 +1,20 @@
-# Cellar — a Windows compatibility layer for Linux.
+# Airlock — a Windows compatibility layer for Linux.
 #
 # Targets:
-#   make            build the `cellar` CLI (default)
+#   make            build the `airlock` CLI (default)
 #   make test       build and run the unit tests
 #   make check      alias for `make test`
 #   make sample     generate a synthetic PE (samples/hello.exe)
 #   make fuzz       run a short loader fuzz campaign
 #   make clean      remove build artifacts
-#   make libcellar  build only the static library archive
+#   make libairlock  build only the static library archive
 #   make ALSA=1     also build the optional ALSA audio backend (needs libasound)
 #
 # Optional knobs:
 #   CC      the C compiler            (default: cc)
 #   CFLAGS  extra compiler flags      (default: see below)
 #   ALSA=1  enable the real ALSA audio backend
-#   CELLAR_LOG_LEVEL  compile-time logging threshold (0..4, default 2)
+#   AIRLOCK_LOG_LEVEL  compile-time logging threshold (0..4, default 2)
 
 CC      ?= cc
 BUILD   ?= build
@@ -27,13 +27,13 @@ WARN    = -Wall -Wextra -Wconversion -Wno-sign-conversion
 OPT     = -O2
 STD     = -std=c11
 INC     = -Iinclude
-LOG     = -DCELLAR_LOG_LEVEL=$(if $(CELLAR_LOG_LEVEL),$(CELLAR_LOG_LEVEL),2)
+LOG     = -DAIRLOCK_LOG_LEVEL=$(if $(AIRLOCK_LOG_LEVEL),$(AIRLOCK_LOG_LEVEL),2)
 
 CFLAGS  ?= $(STD) $(INC) $(LOG) $(WARN) $(OPT)
 CPPFLAGS=
 
 LIB_SRCS = \
-	src/loader/cellar_util.c \
+	src/loader/airlock_util.c \
 	src/loader/pe.c \
 	src/loader/loader.c \
 	src/win32/api.c \
@@ -84,7 +84,7 @@ LIB_SRCS = \
 # Optional ALSA backend for real audio on desktop Linux:
 #   make ALSA=1            (requires libasound2-dev)
 LIB_SRCS += $(if $(ALSA),src/audio/alsa.c)
-CFLAGS   += $(if $(ALSA),-DCELLAR_AUDIO_ALSA)
+CFLAGS   += $(if $(ALSA),-DAIRLOCK_AUDIO_ALSA)
 LDLIBS   := $(if $(ALSA),-lasound)
 
 # dlopen (plugin loader) is in glibc>=2.34; add -ldl for older libcs.
@@ -96,8 +96,8 @@ GEN       = $(BUILD)/gen_sample_pe
 FUZZ      = $(BUILD)/fuzz_loader
 SAMPLE    = samples/hello.exe
 
-LIB  = $(BUILD)/libcellar.a
-CLI  = $(BUILD)/cellar
+LIB  = $(BUILD)/libairlock.a
+CLI  = $(BUILD)/airlock
 
 all: $(CLI)
 
@@ -146,7 +146,7 @@ $(BUILD)/obj/%.o: tests/%.c
 	@mkdir -p $(dir $@)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-libcellar: $(LIB)
+libairlock: $(LIB)
 
 TESTS := $(addprefix $(BUILD)/,$(TEST_BINS))
 
@@ -158,4 +158,4 @@ check: test
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all libcellar test check sample fuzz clean
+.PHONY: all libairlock test check sample fuzz clean

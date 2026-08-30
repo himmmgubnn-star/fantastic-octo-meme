@@ -1,5 +1,5 @@
 /*
- * workspace.c — Winaltor-style isolated application workspaces.
+ * workspace.c — Airlock-style isolated application workspaces.
  *
  * This is the product layer: one workspace per app, guided setup, an app
  * library, versioned profiles, snapshots/rollback, launch doctor, support
@@ -24,17 +24,17 @@
 #include <time.h>
 #include <unistd.h>
 
-#include "cellar/cellar.h"
-#include "cellar/compat.h"
-#include "cellar/db.h"
-#include "cellar/desktop.h"
-#include "cellar/device.h"
-#include "cellar/inspect.h"
-#include "cellar/loader.h"
-#include "cellar/plugin.h"
-#include "cellar/prefix.h"
-#include "cellar/runtime.h"
-#include "cellar/workspace.h"
+#include "airlock/airlock.h"
+#include "airlock/compat.h"
+#include "airlock/db.h"
+#include "airlock/desktop.h"
+#include "airlock/device.h"
+#include "airlock/inspect.h"
+#include "airlock/loader.h"
+#include "airlock/plugin.h"
+#include "airlock/prefix.h"
+#include "airlock/runtime.h"
+#include "airlock/workspace.h"
 
 /* ---- helpers -------------------------------------------------------------- */
 
@@ -48,7 +48,7 @@ static int valid_name(const char *name)
 
 static void ws_dir(char *dst, size_t n, const char *root, const char *name)
 {
-    cellar_path_join(dst, n, root ? root : ".", name ? name : "");
+    airlock_path_join(dst, n, root ? root : ".", name ? name : "");
 }
 
 static int file_exists(const char *path)
@@ -135,7 +135,7 @@ static uint64_t field_u64(const char *conf, const char *key, uint64_t def)
 
 static void set_field(char *dst, size_t cap, const char *val)
 {
-    cellar_strlcpy(dst, cap, val ? val : "");
+    airlock_strlcpy(dst, cap, val ? val : "");
 }
 
 /* FNV-1a 64-bit file digest. */
@@ -206,7 +206,7 @@ static int copy_file(const char *src, const char *dst)
     slash = strrchr(dir, '/');
     if (slash) {
         *slash = '\0';
-        if (cellar_mkdir_p(dir) != 0)
+        if (airlock_mkdir_p(dir) != 0)
             return 0;
     }
     in = fopen(src, "rb");
@@ -224,25 +224,25 @@ static int copy_file(const char *src, const char *dst)
     return 1;
 }
 
-static cellar_version_mode_t win_mode_from_name(const char *s)
+static airlock_version_mode_t win_mode_from_name(const char *s)
 {
     if (!s || !*s)
-        return CELLAR_WIN_10;
+        return AIRLOCK_WIN_10;
     if (strcasecmp(s, "win7") == 0 || strcasecmp(s, "windows 7") == 0)
-        return CELLAR_WIN_7;
+        return AIRLOCK_WIN_7;
     if (strcasecmp(s, "win81") == 0 || strcasecmp(s, "windows 8.1") == 0)
-        return CELLAR_WIN_81;
+        return AIRLOCK_WIN_81;
     if (strcasecmp(s, "win11") == 0 || strcasecmp(s, "windows 11") == 0)
-        return CELLAR_WIN_11;
-    return CELLAR_WIN_10;
+        return AIRLOCK_WIN_11;
+    return AIRLOCK_WIN_10;
 }
 
-static const char *win_mode_name(cellar_version_mode_t m)
+static const char *win_mode_name(airlock_version_mode_t m)
 {
     switch (m) {
-    case CELLAR_WIN_7:  return "win7";
-    case CELLAR_WIN_81: return "win81";
-    case CELLAR_WIN_11: return "win11";
+    case AIRLOCK_WIN_7:  return "win7";
+    case AIRLOCK_WIN_81: return "win81";
+    case AIRLOCK_WIN_11: return "win11";
     default:            return "win10";
     }
 }
@@ -258,9 +258,9 @@ static const char *arch_from_machine(uint16_t m)
     }
 }
 
-static const char *trust_name_from_profile(cellar_profile_trust_t t)
+static const char *trust_name_from_profile(airlock_profile_trust_t t)
 {
-    return cellar_profile_trust_name(t);
+    return airlock_profile_trust_name(t);
 }
 
 static int contains_ci(const char *hay, const char *needle)
@@ -286,84 +286,84 @@ static int contains_ci(const char *hay, const char *needle)
 
 /* ---- public name helpers -------------------------------------------------- */
 
-const char *cellar_setup_kind_name(cellar_setup_kind_t k)
+const char *airlock_setup_kind_name(airlock_setup_kind_t k)
 {
     switch (k) {
-    case CELLAR_SETUP_MSI:     return "msi";
-    case CELLAR_SETUP_IMPORT:  return "import";
-    case CELLAR_SETUP_PORTABLE:return "portable";
-    case CELLAR_SETUP_EXE:
+    case AIRLOCK_SETUP_MSI:     return "msi";
+    case AIRLOCK_SETUP_IMPORT:  return "import";
+    case AIRLOCK_SETUP_PORTABLE:return "portable";
+    case AIRLOCK_SETUP_EXE:
     default:                   return "exe";
     }
 }
 
-const char *cellar_perf_mode_name(cellar_perf_mode_t m)
+const char *airlock_perf_mode_name(airlock_perf_mode_t m)
 {
     switch (m) {
-    case CELLAR_PERF_BATTERY_SAVER: return "battery-saver";
-    case CELLAR_PERF_PERFORMANCE:   return "performance";
-    case CELLAR_PERF_CUSTOM:        return "custom";
+    case AIRLOCK_PERF_BATTERY_SAVER: return "battery-saver";
+    case AIRLOCK_PERF_PERFORMANCE:   return "performance";
+    case AIRLOCK_PERF_CUSTOM:        return "custom";
     default:                        return "balanced";
     }
 }
 
-const char *cellar_control_kind_name(cellar_control_kind_t k)
+const char *airlock_control_kind_name(airlock_control_kind_t k)
 {
     switch (k) {
-    case CELLAR_CONTROL_GAMEPAD: return "gamepad";
-    case CELLAR_CONTROL_TOUCH:   return "touch";
-    case CELLAR_CONTROL_BOTH:    return "gamepad+touch";
+    case AIRLOCK_CONTROL_GAMEPAD: return "gamepad";
+    case AIRLOCK_CONTROL_TOUCH:   return "touch";
+    case AIRLOCK_CONTROL_BOTH:    return "gamepad+touch";
     default:                     return "none";
     }
 }
 
-const char *cellar_profile_trust_name(cellar_profile_trust_t t)
+const char *airlock_profile_trust_name(airlock_profile_trust_t t)
 {
     switch (t) {
-    case CELLAR_PROFILE_OFFICIAL:    return "official";
-    case CELLAR_PROFILE_COMMUNITY:   return "community";
-    case CELLAR_PROFILE_EXPERIMENTAL:return "experimental";
+    case AIRLOCK_PROFILE_OFFICIAL:    return "official";
+    case AIRLOCK_PROFILE_COMMUNITY:   return "community";
+    case AIRLOCK_PROFILE_EXPERIMENTAL:return "experimental";
     default:                         return "local";
     }
 }
 
-const char *cellar_workspace_root(void)
+const char *airlock_workspace_root(void)
 {
     static char buf[1024];
-    const char *env = getenv("WINALTOR_ROOT");
+    const char *env = getenv("AIRLOCK_ROOT");
     if (env && *env) {
         snprintf(buf, sizeof buf, "%s", env);
         return buf;
     }
-    return cellar_prefix_dir();
+    return airlock_prefix_dir();
 }
 
 /* ---- load / save ---------------------------------------------------------- */
 
-cellar_status_t cellar_workspace_load(const char *root, const char *name,
-                                      cellar_workspace_t *out)
+airlock_status_t airlock_workspace_load(const char *root, const char *name,
+                                      airlock_workspace_t *out)
 {
     char ws[640], path[720];
     char buf[16384];
     if (!root || !valid_name(name) || !out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ws_dir(ws, sizeof ws, root, name);
-    cellar_path_join(path, sizeof path, ws, "app.conf");
+    airlock_path_join(path, sizeof path, ws, "app.conf");
     if (!read_text(path, buf, sizeof buf))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
 
     memset(out, 0, sizeof *out);
     set_field(out->name, sizeof out->name, name);
     set_field(out->path, sizeof out->path, ws);
     find_field(buf, "id", out->id, sizeof out->id);
-    out->setup = (cellar_setup_kind_t)field_int(buf, "setup", (int)CELLAR_SETUP_EXE);
+    out->setup = (airlock_setup_kind_t)field_int(buf, "setup", (int)AIRLOCK_SETUP_EXE);
     find_field(buf, "setup_label", out->setup_label, sizeof out->setup_label);
     find_field(buf, "source", out->source, sizeof out->source);
     find_field(buf, "executable", out->executable, sizeof out->executable);
     find_field(buf, "architecture", out->architecture, sizeof out->architecture);
     find_field(buf, "runner", out->runner, sizeof out->runner);
-    out->windows_version = (cellar_version_mode_t)field_int(buf, "windows_version",
-                                                            (int)CELLAR_WIN_10);
+    out->windows_version = (airlock_version_mode_t)field_int(buf, "windows_version",
+                                                            (int)AIRLOCK_WIN_10);
     find_field(buf, "gfx_backend", out->gfx_backend, sizeof out->gfx_backend);
     find_field(buf, "audio_backend", out->audio_backend, sizeof out->audio_backend);
     find_field(buf, "dll_overrides", out->dll_overrides, sizeof out->dll_overrides);
@@ -376,8 +376,8 @@ cellar_status_t cellar_workspace_load(const char *root, const char *name,
     out->favorite = field_int(buf, "favorite", 0);
     out->has_shortcut = field_int(buf, "has_shortcut", 0);
     out->install_size = field_u64(buf, "install_size", 0);
-    out->perf_mode = (cellar_perf_mode_t)field_int(buf, "perf_mode",
-                                                   (int)CELLAR_PERF_BALANCED);
+    out->perf_mode = (airlock_perf_mode_t)field_int(buf, "perf_mode",
+                                                   (int)AIRLOCK_PERF_BALANCED);
     out->resolution_width = (uint32_t)field_int(buf, "resolution_width", 1280);
     out->resolution_height = (uint32_t)field_int(buf, "resolution_height", 720);
     out->dpi = (uint32_t)field_int(buf, "dpi", 96);
@@ -385,32 +385,32 @@ cellar_status_t cellar_workspace_load(const char *root, const char *name,
     out->permissions = (uint32_t)field_u64(buf, "permissions", 0);
     find_field(buf, "controls", out->controls, sizeof out->controls);
     out->sandbox_enabled = field_int(buf, "sandbox_enabled", 1);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_workspace_save(const cellar_workspace_t *w)
+airlock_status_t airlock_workspace_save(const airlock_workspace_t *w)
 {
     char path[720];
     FILE *f;
     if (!w || !w->name[0])
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (!w->path[0]) {
         char root[1024];
-        snprintf(root, sizeof root, "%s", cellar_workspace_root());
+        snprintf(root, sizeof root, "%s", airlock_workspace_root());
         ws_dir((char *)w->path, sizeof w->path, root, w->name);
     }
-    cellar_mkdir_p(w->path);
-    cellar_path_join(path, sizeof path, w->path, "app.conf");
+    airlock_mkdir_p(w->path);
+    airlock_path_join(path, sizeof path, w->path, "app.conf");
     f = fopen(path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    fprintf(f, "# winaltor workspace %s\n", w->name);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    fprintf(f, "# airlock workspace %s\n", w->name);
     fprintf(f, "name=%s\n", w->name);
     fprintf(f, "path=%s\n", w->path);
     fprintf(f, "id=%s\n", w->id);
     fprintf(f, "setup=%d\n", (int)w->setup);
     fprintf(f, "setup_label=%s\n",
-            w->setup_label[0] ? w->setup_label : cellar_setup_kind_name(w->setup));
+            w->setup_label[0] ? w->setup_label : airlock_setup_kind_name(w->setup));
     fprintf(f, "source=%s\n", w->source);
     fprintf(f, "executable=%s\n", w->executable);
     fprintf(f, "architecture=%s\n", w->architecture);
@@ -437,10 +437,10 @@ cellar_status_t cellar_workspace_save(const cellar_workspace_t *w)
     fprintf(f, "controls=%s\n", w->controls);
     fprintf(f, "sandbox_enabled=%d\n", w->sandbox_enabled);
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-size_t cellar_workspace_list(const char *root, cellar_workspace_t *out,
+size_t airlock_workspace_list(const char *root, airlock_workspace_t *out,
                              size_t cap)
 {
     DIR *d;
@@ -459,43 +459,43 @@ size_t cellar_workspace_list(const char *root, cellar_workspace_t *out,
         snprintf(child, sizeof child, "%s/%s", root, ent->d_name);
         if (stat(child, &st) != 0 || !S_ISDIR(st.st_mode))
             continue;
-        cellar_path_join(app, sizeof app, child, "app.conf");
+        airlock_path_join(app, sizeof app, child, "app.conf");
         if (!file_exists(app))
             continue;
-        if (cellar_workspace_load(root, ent->d_name, &out[n]) == CELLAR_OK)
+        if (airlock_workspace_load(root, ent->d_name, &out[n]) == AIRLOCK_OK)
             n++;
     }
     closedir(d);
     return n;
 }
 
-const cellar_workspace_t *cellar_workspace_find(const char *root,
+const airlock_workspace_t *airlock_workspace_find(const char *root,
                                                 const char *name)
 {
-    static cellar_workspace_t tmp;
-    if (cellar_workspace_load(root, name, &tmp) != CELLAR_OK)
+    static airlock_workspace_t tmp;
+    if (airlock_workspace_load(root, name, &tmp) != AIRLOCK_OK)
         return NULL;
     return &tmp;
 }
 
-cellar_status_t cellar_workspace_remove(const char *root, const char *name)
+airlock_status_t airlock_workspace_remove(const char *root, const char *name)
 {
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     if (!root || !valid_name(name))
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    return cellar_prefix_delete(root, name);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    return airlock_prefix_delete(root, name);
 }
 
-cellar_status_t cellar_workspace_set(const char *root, const char *name,
+airlock_status_t airlock_workspace_set(const char *root, const char *name,
                                      const char *key, const char *value)
 {
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     if (!key || !*key)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (strcmp(key, "name") == 0) {
         set_field(w.name, sizeof w.name, value);
     } else if (strcmp(key, "tags") == 0) {
@@ -525,68 +525,68 @@ cellar_status_t cellar_workspace_set(const char *root, const char *name,
     } else if (strcmp(key, "shortcut") == 0) {
         w.has_shortcut = value && atoi(value);
     } else {
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
-    return cellar_workspace_save(&w);
+    return airlock_workspace_save(&w);
 }
 
-cellar_status_t cellar_workspace_set_permissions(const char *root,
+airlock_status_t airlock_workspace_set_permissions(const char *root,
                                                  const char *name,
                                                  uint32_t permissions)
 {
-    cellar_workspace_t w;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    airlock_workspace_t w;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     w.permissions = permissions;
-    return cellar_workspace_save(&w);
+    return airlock_workspace_save(&w);
 }
 
-cellar_status_t cellar_workspace_set_perf_mode(const char *root,
+airlock_status_t airlock_workspace_set_perf_mode(const char *root,
                                                const char *name,
-                                               cellar_perf_mode_t mode)
+                                               airlock_perf_mode_t mode)
 {
-    cellar_workspace_t w;
-    if (mode >= CELLAR_PERF_MODE_COUNT)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    airlock_workspace_t w;
+    if (mode >= AIRLOCK_PERF_MODE_COUNT)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     w.perf_mode = mode;
-    return cellar_workspace_save(&w);
+    return airlock_workspace_save(&w);
 }
 
-cellar_status_t cellar_workspace_set_controls(const char *root,
+airlock_status_t airlock_workspace_set_controls(const char *root,
                                               const char *name,
                                               const char *controls)
 {
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     if (!controls)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     set_field(w.controls, sizeof w.controls, controls);
-    return cellar_workspace_save(&w);
+    return airlock_workspace_save(&w);
 }
 
-cellar_status_t cellar_workspace_set_resolution(const char *root,
+airlock_status_t airlock_workspace_set_resolution(const char *root,
                                                 const char *name,
                                                 uint32_t width,
                                                 uint32_t height,
                                                 uint32_t dpi,
                                                 int virtual_desktop)
 {
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     if (!width || !height || dpi == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     w.resolution_width = width;
     w.resolution_height = height;
     w.dpi = dpi;
     w.virtual_desktop = virtual_desktop ? 1 : 0;
-    return cellar_workspace_save(&w);
+    return airlock_workspace_save(&w);
 }
 
-uint64_t cellar_workspace_size(const char *root, const char *name)
+uint64_t airlock_workspace_size(const char *root, const char *name)
 {
     char ws[640];
     if (!root || !valid_name(name))
@@ -597,8 +597,8 @@ uint64_t cellar_workspace_size(const char *root, const char *name)
 
 /* ---- install -------------------------------------------------------------- */
 
-static void ws_defaults(cellar_workspace_t *w, const char *root,
-                        const char *name, cellar_setup_kind_t setup)
+static void ws_defaults(airlock_workspace_t *w, const char *root,
+                        const char *name, airlock_setup_kind_t setup)
 {
     time_t t = time(NULL);
     struct tm *tmv = gmtime(&t);
@@ -606,21 +606,21 @@ static void ws_defaults(cellar_workspace_t *w, const char *root,
     memset(w, 0, sizeof *w);
     set_field(w->name, sizeof w->name, name);
     ws_dir(w->path, sizeof w->path, root, name);
-    snprintf(w->id, sizeof w->id, "%08x", cellar_hash_str(name));
+    snprintf(w->id, sizeof w->id, "%08x", airlock_hash_str(name));
     w->setup = setup;
     set_field(w->setup_label, sizeof w->setup_label,
-              cellar_setup_kind_name(setup));
+              airlock_setup_kind_name(setup));
     snprintf(w->architecture, sizeof w->architecture, "%s", "x86");
-    snprintf(w->runner, sizeof w->runner, "%s", "winaltor-wine-10.x");
-    w->windows_version = CELLAR_WIN_10;
+    snprintf(w->runner, sizeof w->runner, "%s", "airlock-wine-10.x");
+    w->windows_version = AIRLOCK_WIN_10;
     set_field(w->gfx_backend, sizeof w->gfx_backend, "Vulkan");
     set_field(w->audio_backend, sizeof w->audio_backend, "ALSA");
     set_field(w->compat_rating, sizeof w->compat_rating, "UNKNOWN");
-    w->perf_mode = CELLAR_PERF_BALANCED;
+    w->perf_mode = AIRLOCK_PERF_BALANCED;
     w->resolution_width = 1280;
     w->resolution_height = 720;
     w->dpi = 96;
-    w->permissions = CELLAR_PERM_NETWORK;
+    w->permissions = AIRLOCK_PERM_NETWORK;
     set_field(w->controls, sizeof w->controls, "default");
     w->sandbox_enabled = 1;
     if (tmv) {
@@ -633,7 +633,7 @@ static void ws_defaults(cellar_workspace_t *w, const char *root,
     }
 }
 
-static void detect_source(cellar_workspace_t *w, const char *path)
+static void detect_source(airlock_workspace_t *w, const char *path)
 {
     struct stat st;
     if (!path || stat(path, &st) != 0)
@@ -643,67 +643,67 @@ static void detect_source(cellar_workspace_t *w, const char *path)
         hash_hex(w->exe_hash, sizeof w->exe_hash, file_hash(path));
     }
     {
-        cellar_image_t img;
-        cellar_inspect_t ins;
-        cellar_analysis_t a;
-        if (cellar_image_load_file(path, CELLAR_LOAD_DEFAULT, &img) == CELLAR_OK) {
-            if (cellar_inspect_image(&img, path, &ins) == CELLAR_OK) {
+        airlock_image_t img;
+        airlock_inspect_t ins;
+        airlock_analysis_t a;
+        if (airlock_image_load_file(path, AIRLOCK_LOAD_DEFAULT, &img) == AIRLOCK_OK) {
+            if (airlock_inspect_image(&img, path, &ins) == AIRLOCK_OK) {
                 set_field(w->architecture, sizeof w->architecture,
                           arch_from_machine(ins.machine));
                 if (ins.graphics[0])
                     set_field(w->gfx_backend, sizeof w->gfx_backend, ins.graphics);
                 if (ins.audio[0])
                     set_field(w->audio_backend, sizeof w->audio_backend, ins.audio);
-                if (cellar_compat_analyze(&img, ins.basename, &a) == CELLAR_OK) {
+                if (airlock_compat_analyze(&img, ins.basename, &a) == AIRLOCK_OK) {
                     int pct = a.overall_percent;
                     set_field(w->compat_rating, sizeof w->compat_rating,
                               pct >= 90 ? "HIGH" : pct >= 60 ? "MEDIUM" : "LOW");
                 }
                 if (ins.needs_vcruntime) {
                     if (w->dependencies[0])
-                        cellar_strlcat(w->dependencies, sizeof w->dependencies, ",vcruntime");
+                        airlock_strlcat(w->dependencies, sizeof w->dependencies, ",vcruntime");
                     else
                         set_field(w->dependencies, sizeof w->dependencies, "vcruntime");
                 }
                 if (ins.needs_dotnet) {
                     if (w->dependencies[0])
-                        cellar_strlcat(w->dependencies, sizeof w->dependencies, ",dotnet");
+                        airlock_strlcat(w->dependencies, sizeof w->dependencies, ",dotnet");
                     else
                         set_field(w->dependencies, sizeof w->dependencies, "dotnet");
                 }
             }
-            cellar_image_unload(&img);
+            airlock_image_unload(&img);
         }
     }
 }
 
-cellar_status_t cellar_workspace_install(const char *root, const char *name,
-                                         cellar_setup_kind_t setup,
+airlock_status_t airlock_workspace_install(const char *root, const char *name,
+                                         airlock_setup_kind_t setup,
                                          const char *source,
                                          const char *executable,
-                                         cellar_workspace_t *out)
+                                         airlock_workspace_t *out)
 {
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     struct stat st;
-    if (!root || !valid_name(name) || setup >= CELLAR_SETUP_COUNT)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) == CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT; /* already exists */
+    if (!root || !valid_name(name) || setup >= AIRLOCK_SETUP_COUNT)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) == AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT; /* already exists */
 
-    if (cellar_prefix_create(root, name) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (airlock_prefix_create(root, name) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
 
     ws_defaults(&w, root, name, setup);
     set_field(w.source, sizeof w.source, source);
     set_field(w.executable, sizeof w.executable, executable);
     if (source && stat(source, &st) == 0) {
         detect_source(&w, source);
-        if (setup == CELLAR_SETUP_PORTABLE && S_ISREG(st.st_mode)) {
+        if (setup == AIRLOCK_SETUP_PORTABLE && S_ISREG(st.st_mode)) {
             char dest[720], games[720];
             const char *base = strrchr(source, '/');
             base = base ? base + 1 : source;
-            cellar_path_join(games, sizeof games, w.path, "drive_c/Games");
-            if (cellar_mkdir_p(games) == 0) {
+            airlock_path_join(games, sizeof games, w.path, "drive_c/Games");
+            if (airlock_mkdir_p(games) == 0) {
                 snprintf(dest, sizeof dest, "%s/%s/%s", w.path,
                          "drive_c/Games", base);
                 if (copy_file(source, dest))
@@ -712,28 +712,28 @@ cellar_status_t cellar_workspace_install(const char *root, const char *name,
         }
     }
     if (!w.install_size)
-        w.install_size = cellar_workspace_size(root, name);
-    if (cellar_workspace_save(&w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        w.install_size = airlock_workspace_size(root, name);
+    if (airlock_workspace_save(&w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
 
     /* Create a shortcut beside the workspace so the app is easy to launch. */
     {
         char sdir[720], exec[1024];
-        cellar_desktop_entry_t de;
-        cellar_path_join(sdir, sizeof sdir, w.path, "shortcuts");
+        airlock_desktop_entry_t de;
+        airlock_path_join(sdir, sizeof sdir, w.path, "shortcuts");
         memset(&de, 0, sizeof de);
         snprintf(de.name, sizeof de.name, "%s", name);
-        snprintf(exec, sizeof exec, "cellar app run %s", name);
-        cellar_strlcpy(de.exec, sizeof de.exec, exec);
-        cellar_strlcpy(de.categories, sizeof de.categories, "Game;");
-        if (cellar_desktop_write_shortcut(sdir, &de) == CELLAR_OK) {
+        snprintf(exec, sizeof exec, "airlock app run %s", name);
+        airlock_strlcpy(de.exec, sizeof de.exec, exec);
+        airlock_strlcpy(de.categories, sizeof de.categories, "Game;");
+        if (airlock_desktop_write_shortcut(sdir, &de) == AIRLOCK_OK) {
             w.has_shortcut = 1;
-            cellar_workspace_save(&w);
+            airlock_workspace_save(&w);
         }
     }
     if (out)
         *out = w;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 /* ---- profile path resolution ---------------------------------------------- */
@@ -744,23 +744,23 @@ static void profile_path(char *dst, size_t n, const char *root,
     char ws[640], dir[720];
     ws_dir(ws, sizeof ws, root, name);
     if (!label || !*label) {
-        cellar_path_join(dst, n, ws, "profiles/current.profile");
+        airlock_path_join(dst, n, ws, "profiles/current.profile");
         return;
     }
     if (strchr(label, '/')) {
-        cellar_strlcpy(dst, n, label);
+        airlock_strlcpy(dst, n, label);
         return;
     }
     snprintf(dir, sizeof dir, "%s/profiles", ws);
-    cellar_strlcpy(dst, n, dir);
-    cellar_strlcat(dst, n, "/");
-    cellar_strlcat(dst, n, label);
-    cellar_strlcat(dst, n, ".profile");
+    airlock_strlcpy(dst, n, dir);
+    airlock_strlcat(dst, n, "/");
+    airlock_strlcat(dst, n, label);
+    airlock_strlcat(dst, n, ".profile");
 }
 
-static void profile_yaml_write(FILE *f, const cellar_profile_point_t *p)
+static void profile_yaml_write(FILE *f, const airlock_profile_point_t *p)
 {
-    fprintf(f, "# Winaltor compatibility profile\n");
+    fprintf(f, "# Airlock compatibility profile\n");
     fprintf(f, "name: %s\n", p->app_name[0] ? p->app_name : p->label);
     fprintf(f, "label: %s\n", p->label);
     fprintf(f, "runner: %s\n", p->runner);
@@ -781,12 +781,12 @@ static void profile_yaml_write(FILE *f, const cellar_profile_point_t *p)
     fprintf(f, "version: %u\n", p->version);
 }
 
-static cellar_status_t profile_parse(const char *text,
-                                     cellar_profile_point_t *out)
+static airlock_status_t profile_parse(const char *text,
+                                     airlock_profile_point_t *out)
 {
     const char *p = text;
     if (!out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(out, 0, sizeof *out);
     while (p && *p) {
         char line[768];
@@ -845,13 +845,13 @@ static cellar_status_t profile_parse(const char *text,
             set_field(out->launch_args, sizeof out->launch_args, val);
         } else if (strcmp(key, "trust") == 0) {
             if (strcasecmp(val, "official") == 0)
-                out->trust = CELLAR_PROFILE_OFFICIAL;
+                out->trust = AIRLOCK_PROFILE_OFFICIAL;
             else if (strcasecmp(val, "community") == 0)
-                out->trust = CELLAR_PROFILE_COMMUNITY;
+                out->trust = AIRLOCK_PROFILE_COMMUNITY;
             else if (strcasecmp(val, "experimental") == 0)
-                out->trust = CELLAR_PROFILE_EXPERIMENTAL;
+                out->trust = AIRLOCK_PROFILE_EXPERIMENTAL;
             else
-                out->trust = CELLAR_PROFILE_LOCAL;
+                out->trust = AIRLOCK_PROFILE_LOCAL;
         } else if (strcmp(key, "source") == 0) {
             set_field(out->source, sizeof out->source, val);
         } else if (strcmp(key, "exe_hash") == 0) {
@@ -860,23 +860,23 @@ static cellar_status_t profile_parse(const char *text,
             out->version = (uint32_t)strtoul(val, NULL, 0);
         }
     }
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_workspace_profile_save(const char *root,
+airlock_status_t airlock_workspace_profile_save(const char *root,
                                               const char *name,
-                                              const cellar_profile_point_t *p,
+                                              const airlock_profile_point_t *p,
                                               char *path_out, size_t path_cap)
 {
     char path[720], dir[720];
     FILE *f;
     char tmp[640];
     if (!root || !valid_name(name) || !p || !p->label[0])
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ws_dir(tmp, sizeof tmp, root, name);
     snprintf(dir, sizeof dir, "%s/profiles", tmp);
-    if (cellar_mkdir_p(dir) != 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (airlock_mkdir_p(dir) != 0)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     profile_path(path, sizeof path, root, name, p->label);
     {
         char parent[720];
@@ -885,56 +885,56 @@ cellar_status_t cellar_workspace_profile_save(const char *root,
         slash = strrchr(parent, '/');
         if (slash) {
             *slash = '\0';
-            if (cellar_mkdir_p(parent) != 0)
-                return CELLAR_ERR_INVALID_ARGUMENT;
+            if (airlock_mkdir_p(parent) != 0)
+                return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
     }
     f = fopen(path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     profile_yaml_write(f, p);
     fclose(f);
     if (path_out && path_cap)
-        cellar_strlcpy(path_out, path_cap, path);
-    return CELLAR_OK;
+        airlock_strlcpy(path_out, path_cap, path);
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_workspace_profile_load(const char *root,
+airlock_status_t airlock_workspace_profile_load(const char *root,
                                               const char *name,
                                               const char *label,
-                                              cellar_profile_point_t *out)
+                                              airlock_profile_point_t *out)
 {
     char path[720];
     char buf[8192];
     if (!root || !valid_name(name) || !out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     profile_path(path, sizeof path, root, name, label);
     if (!read_text(path, buf, sizeof buf))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     return profile_parse(buf, out);
 }
 
-cellar_status_t cellar_workspace_profile_current(const char *root,
+airlock_status_t airlock_workspace_profile_current(const char *root,
                                                  const char *name,
-                                                 cellar_profile_point_t *out)
+                                                 airlock_profile_point_t *out)
 {
     char path[720];
     if (!root || !valid_name(name))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     profile_path(path, sizeof path, root, name, NULL);
     if (!out)
-        return file_exists(path) ? CELLAR_OK : CELLAR_ERR_INVALID_ARGUMENT;
-    return cellar_workspace_profile_load(root, name, NULL, out);
+        return file_exists(path) ? AIRLOCK_OK : AIRLOCK_ERR_INVALID_ARGUMENT;
+    return airlock_workspace_profile_load(root, name, NULL, out);
 }
 
-cellar_status_t cellar_workspace_profile_apply(const char *root,
+airlock_status_t airlock_workspace_profile_apply(const char *root,
                                                const char *name,
-                                               const cellar_profile_point_t *p)
+                                               const airlock_profile_point_t *p)
 {
-    cellar_workspace_t w;
-    cellar_profile_point_t cur;
-    if (!p || cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    airlock_workspace_t w;
+    airlock_profile_point_t cur;
+    if (!p || airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (p->runner[0])
         set_field(w.runner, sizeof w.runner, p->runner);
     if (p->architecture[0])
@@ -956,31 +956,31 @@ cellar_status_t cellar_workspace_profile_apply(const char *root,
     w.virtual_desktop = p->virtual_desktop;
     if (p->exe_hash[0])
         set_field(w.exe_hash, sizeof w.exe_hash, p->exe_hash);
-    if (cellar_workspace_save(&w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_save(&w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
 
-    if (cellar_workspace_profile_current(root, name, &cur) != CELLAR_OK)
+    if (airlock_workspace_profile_current(root, name, &cur) != AIRLOCK_OK)
         memset(&cur, 0, sizeof cur);
     if (cur.label[0] != p->label[0] || strcmp(cur.label, p->label) != 0) {
-        cellar_profile_point_t tmp = *p;
+        airlock_profile_point_t tmp = *p;
         char dir[720], active[720];
         FILE *f;
-        if (cellar_workspace_profile_save(root, name, &tmp, NULL, 0) != CELLAR_OK)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+        if (airlock_workspace_profile_save(root, name, &tmp, NULL, 0) != AIRLOCK_OK)
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
         /* Write current.profile as the active point. */
         ws_dir(dir, sizeof dir, root, name);
-        cellar_strlcpy(active, sizeof active, dir);
-        cellar_strlcat(active, sizeof active, "/profiles/current.profile");
+        airlock_strlcpy(active, sizeof active, dir);
+        airlock_strlcat(active, sizeof active, "/profiles/current.profile");
         f = fopen(active, "w");
         if (f) {
             profile_yaml_write(f, &tmp);
             fclose(f);
         }
     }
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-size_t cellar_workspace_profile_list(const char *root, const char *name,
+size_t airlock_workspace_profile_list(const char *root, const char *name,
                                      char out[][64], size_t cap)
 {
     char ws[640], path[720];
@@ -990,7 +990,7 @@ size_t cellar_workspace_profile_list(const char *root, const char *name,
     if (!root || !valid_name(name) || !out || cap == 0)
         return 0;
     ws_dir(ws, sizeof ws, root, name);
-    cellar_path_join(path, sizeof path, ws, "profiles");
+    airlock_path_join(path, sizeof path, ws, "profiles");
     d = opendir(path);
     if (!d)
         return 0;
@@ -998,7 +998,7 @@ size_t cellar_workspace_profile_list(const char *root, const char *name,
         size_t L = strlen(ent->d_name);
         if (L > 8 && strcmp(ent->d_name + (L - 8), ".profile") == 0 &&
             strcmp(ent->d_name, "current.profile") != 0) {
-            cellar_strlcpy(out[n], sizeof out[0], ent->d_name);
+            airlock_strlcpy(out[n], sizeof out[0], ent->d_name);
             out[n][L - 8] = '\0';
             n++;
         }
@@ -1017,8 +1017,8 @@ static int diff_append(char *out, size_t cap, int n, const char *line)
     return n;
 }
 
-static int profile_diff_points(const cellar_profile_point_t *a,
-                               const cellar_profile_point_t *b,
+static int profile_diff_points(const airlock_profile_point_t *a,
+                               const airlock_profile_point_t *b,
                                char *out, size_t cap)
 {
     int n = 0;
@@ -1092,53 +1092,53 @@ static int profile_diff_points(const cellar_profile_point_t *a,
     return n;
 }
 
-int cellar_workspace_profile_diff(const char *root, const char *name,
+int airlock_workspace_profile_diff(const char *root, const char *name,
                                   const char *a, const char *b,
                                   char *out, size_t cap)
 {
-    cellar_profile_point_t pa, pb;
+    airlock_profile_point_t pa, pb;
     if (out && cap)
         out[0] = '\0';
-    if (cellar_workspace_profile_load(root, name, a, &pa) != CELLAR_OK ||
-        cellar_workspace_profile_load(root, name, b, &pb) != CELLAR_OK)
+    if (airlock_workspace_profile_load(root, name, a, &pa) != AIRLOCK_OK ||
+        airlock_workspace_profile_load(root, name, b, &pb) != AIRLOCK_OK)
         return -1;
     return profile_diff_points(&pa, &pb, out, cap);
 }
 
-cellar_status_t cellar_workspace_profile_export(const char *root,
+airlock_status_t airlock_workspace_profile_export(const char *root,
                                                 const char *name,
                                                 const char *dest_path)
 {
-    cellar_profile_point_t p;
+    airlock_profile_point_t p;
     FILE *f;
     if (!dest_path)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_profile_current(root, name, &p) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_profile_current(root, name, &p) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     f = fopen(dest_path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     profile_yaml_write(f, &p);
     fclose(f);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_workspace_profile_import(const char *root,
+airlock_status_t airlock_workspace_profile_import(const char *root,
                                                 const char *name,
                                                 const char *src_path)
 {
-    cellar_profile_point_t p;
+    airlock_profile_point_t p;
     char buf[8192];
     char label[64];
     if (!src_path || !read_text(src_path, buf, sizeof buf))
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (profile_parse(buf, &p) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (profile_parse(buf, &p) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     {
         const char *base = strrchr(src_path, '/');
         base = base ? base + 1 : src_path;
         if (strlen(base) > 8 && strcmp(base + (strlen(base) - 8), ".profile") == 0) {
-            cellar_strlcpy(label, sizeof label, base);
+            airlock_strlcpy(label, sizeof label, base);
             label[strlen(base) - 8] = '\0';
         } else {
             const char *dot = strrchr(base, '.');
@@ -1149,10 +1149,10 @@ cellar_status_t cellar_workspace_profile_import(const char *root,
         }
     }
     set_field(p.label, sizeof p.label, label);
-    p.trust = CELLAR_PROFILE_COMMUNITY;
-    if (cellar_workspace_profile_save(root, name, &p, NULL, 0) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    return cellar_workspace_profile_apply(root, name, &p);
+    p.trust = AIRLOCK_PROFILE_COMMUNITY;
+    if (airlock_workspace_profile_save(root, name, &p, NULL, 0) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    return airlock_workspace_profile_apply(root, name, &p);
 }
 
 /* ---- snapshots ------------------------------------------------------------ */
@@ -1165,62 +1165,62 @@ static void snapshot_dir(char *dst, size_t n, const char *root,
     snprintf(dst, n, "%s/snapshots/%s", ws, label);
 }
 
-cellar_status_t cellar_workspace_snapshot(const char *root, const char *name,
+airlock_status_t airlock_workspace_snapshot(const char *root, const char *name,
                                           const char *label)
 {
     char ws[640], snap[720], file[800], dest[800];
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     const char *files[] = { "app.conf", "prefix.conf", "profiles/current.profile" };
     size_t i;
     if (!root || !valid_name(name) || !label || !*label ||
         strchr(label, '/'))
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ws_dir(ws, sizeof ws, root, name);
     snapshot_dir(snap, sizeof snap, root, name, label);
-    if (cellar_mkdir_p(snap) != 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (airlock_mkdir_p(snap) != 0)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     for (i = 0; i < sizeof files / sizeof files[0]; i++) {
         snprintf(file, sizeof file, "%s/%s", ws, files[i]);
         if (file_exists(file)) {
             snprintf(dest, sizeof dest, "%s/%s", snap, files[i]);
             if (!copy_file(file, dest))
-                return CELLAR_ERR_INVALID_ARGUMENT;
+                return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
     }
     /* Mark the snapshot with a human label. */
     snprintf(dest, sizeof dest, "%s/label.txt", snap);
     write_text(dest, label);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-cellar_status_t cellar_workspace_rollback(const char *root, const char *name,
+airlock_status_t airlock_workspace_rollback(const char *root, const char *name,
                                           const char *label)
 {
     char snap[720], file[800], dest[800];
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     const char *files[] = { "app.conf", "prefix.conf", "profiles/current.profile" };
     size_t i;
     if (!root || !valid_name(name) || !label || !*label)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     snapshot_dir(snap, sizeof snap, root, name, label);
     if (!dir_exists(snap))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     for (i = 0; i < sizeof files / sizeof files[0]; i++) {
         snprintf(file, sizeof file, "%s/%s", snap, files[i]);
         if (file_exists(file)) {
             snprintf(dest, sizeof dest, "%s/%s", w.path, files[i]);
             if (!copy_file(file, dest))
-                return CELLAR_ERR_INVALID_ARGUMENT;
+                return AIRLOCK_ERR_INVALID_ARGUMENT;
         }
     }
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-size_t cellar_workspace_snapshot_list(const char *root, const char *name,
+size_t airlock_workspace_snapshot_list(const char *root, const char *name,
                                       char out[][64], size_t cap)
 {
     char snap[720];
@@ -1230,7 +1230,7 @@ size_t cellar_workspace_snapshot_list(const char *root, const char *name,
     if (!root || !valid_name(name) || !out || cap == 0)
         return 0;
     snapshot_dir(snap, sizeof snap, root, name, ".");
-    if (cellar_mkdir_p(snap) != 0)
+    if (airlock_mkdir_p(snap) != 0)
         return 0;
     d = opendir(snap);
     if (!d)
@@ -1238,7 +1238,7 @@ size_t cellar_workspace_snapshot_list(const char *root, const char *name,
     while ((ent = readdir(d)) != NULL && n < cap) {
         if (ent->d_name[0] == '.')
             continue;
-        cellar_strlcpy(out[n], sizeof out[0], ent->d_name);
+        airlock_strlcpy(out[n], sizeof out[0], ent->d_name);
         n++;
     }
     closedir(d);
@@ -1247,101 +1247,101 @@ size_t cellar_workspace_snapshot_list(const char *root, const char *name,
 
 /* ---- repair --------------------------------------------------------------- */
 
-cellar_status_t cellar_workspace_repair(const char *root, const char *name)
+airlock_status_t airlock_workspace_repair(const char *root, const char *name)
 {
     char ws[640];
     char path[720];
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     const char *subdirs[] = {
         "drive_c", "drive_c/windows", "runtime", "uninstall",
         "profiles", "snapshots", "shortcuts"
     };
     size_t i;
     if (!root || !valid_name(name))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ws_dir(ws, sizeof ws, root, name);
-    if (cellar_mkdir_p(ws) != 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (airlock_mkdir_p(ws) != 0)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     for (i = 0; i < sizeof subdirs / sizeof subdirs[0]; i++) {
         snprintf(path, sizeof path, "%s/%s", ws, subdirs[i]);
-        if (cellar_mkdir_p(path) != 0)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+        if (airlock_mkdir_p(path) != 0)
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK) {
-        ws_defaults(&w, root, name, CELLAR_SETUP_EXE);
-        w.install_size = cellar_workspace_size(root, name);
-        if (cellar_workspace_save(&w) != CELLAR_OK)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK) {
+        ws_defaults(&w, root, name, AIRLOCK_SETUP_EXE);
+        w.install_size = airlock_workspace_size(root, name);
+        if (airlock_workspace_save(&w) != AIRLOCK_OK)
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
-    cellar_path_join(path, sizeof path, ws, "prefix.conf");
+    airlock_path_join(path, sizeof path, ws, "prefix.conf");
     if (!file_exists(path)) {
-        if (cellar_prefix_set_config(root, name, CELLAR_WIN_10,
-                                     "Vulkan", "ALSA") != CELLAR_OK)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+        if (airlock_prefix_set_config(root, name, AIRLOCK_WIN_10,
+                                     "Vulkan", "ALSA") != AIRLOCK_OK)
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
     if (!w.has_shortcut) {
         char exec[1024];
-        cellar_desktop_entry_t de;
-        snprintf(exec, sizeof exec, "cellar app run %s", name);
+        airlock_desktop_entry_t de;
+        snprintf(exec, sizeof exec, "airlock app run %s", name);
         memset(&de, 0, sizeof de);
         set_field(de.name, sizeof de.name, name);
         set_field(de.exec, sizeof de.exec, exec);
         set_field(de.categories, sizeof de.categories, "Game;");
-        cellar_path_join(path, sizeof path, ws, "shortcuts");
-        if (cellar_desktop_write_shortcut(path, &de) == CELLAR_OK) {
+        airlock_path_join(path, sizeof path, ws, "shortcuts");
+        if (airlock_desktop_write_shortcut(path, &de) == AIRLOCK_OK) {
             w.has_shortcut = 1;
-            cellar_workspace_save(&w);
+            airlock_workspace_save(&w);
         }
     }
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 /* ---- doctor --------------------------------------------------------------- */
 
-static void add_check(cellar_doctor_report_t *r, const char *name,
-                      const char *detail, cellar_doctor_result_t result)
+static void add_check(airlock_doctor_report_t *r, const char *name,
+                      const char *detail, airlock_doctor_result_t result)
 {
     if (!r || r->count >= sizeof r->checks / sizeof r->checks[0])
         return;
-    cellar_strlcpy(r->checks[r->count].name, sizeof r->checks[0].name, name);
-    cellar_strlcpy(r->checks[r->count].detail, sizeof r->checks[0].detail,
+    airlock_strlcpy(r->checks[r->count].name, sizeof r->checks[0].name, name);
+    airlock_strlcpy(r->checks[r->count].detail, sizeof r->checks[0].detail,
                    detail ? detail : "");
     r->checks[r->count].result = result;
     r->count++;
-    if (result == CELLAR_DOCTOR_FAIL)
+    if (result == AIRLOCK_DOCTOR_FAIL)
         r->ready = 0;
 }
 
-cellar_status_t cellar_workspace_doctor(const char *root, const char *name,
-                                        cellar_doctor_report_t *out)
+airlock_status_t airlock_workspace_doctor(const char *root, const char *name,
+                                        airlock_doctor_report_t *out)
 {
-    cellar_workspace_t w;
-    cellar_doctor_report_t r;
+    airlock_workspace_t w;
+    airlock_doctor_report_t r;
     struct statvfs sv;
     char path[720];
     if (!out)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     memset(&r, 0, sizeof r);
     r.ready = 1;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK) {
-        add_check(&r, "workspace", "workspace does not exist", CELLAR_DOCTOR_FAIL);
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK) {
+        add_check(&r, "workspace", "workspace does not exist", AIRLOCK_DOCTOR_FAIL);
         *out = r;
-        return CELLAR_OK;
+        return AIRLOCK_OK;
     }
-    add_check(&r, "workspace", w.path, CELLAR_DOCTOR_OK);
+    add_check(&r, "workspace", w.path, AIRLOCK_DOCTOR_OK);
 
     if (!w.executable[0] || !file_exists(w.executable)) {
         add_check(&r, "executable", "launch file missing or not set",
-                  CELLAR_DOCTOR_FAIL);
+                  AIRLOCK_DOCTOR_FAIL);
     } else {
-        add_check(&r, "executable", w.executable, CELLAR_DOCTOR_OK);
+        add_check(&r, "executable", w.executable, AIRLOCK_DOCTOR_OK);
     }
 
     snprintf(path, sizeof path, "%s/drive_c", w.path);
     if (dir_exists(path))
-        add_check(&r, "prefix", w.path, CELLAR_DOCTOR_OK);
+        add_check(&r, "prefix", w.path, AIRLOCK_DOCTOR_OK);
     else
-        add_check(&r, "prefix", "drive_c missing; run repair", CELLAR_DOCTOR_WARN);
+        add_check(&r, "prefix", "drive_c missing; run repair", AIRLOCK_DOCTOR_WARN);
 
     if (statvfs(w.path, &sv) == 0) {
         uint64_t free_bytes = (uint64_t)sv.f_bavail * (uint64_t)sv.f_frsize;
@@ -1349,33 +1349,33 @@ cellar_status_t cellar_workspace_doctor(const char *root, const char *name,
             char detail[128];
             snprintf(detail, sizeof detail, "%llu MB free (recommend >=256)",
                      (unsigned long long)(free_bytes / (1024ULL * 1024ULL)));
-            add_check(&r, "storage", detail, CELLAR_DOCTOR_WARN);
+            add_check(&r, "storage", detail, AIRLOCK_DOCTOR_WARN);
         } else {
-            add_check(&r, "storage", "enough free space", CELLAR_DOCTOR_OK);
+            add_check(&r, "storage", "enough free space", AIRLOCK_DOCTOR_OK);
         }
     } else {
-        add_check(&r, "storage", "could not query", CELLAR_DOCTOR_WARN);
+        add_check(&r, "storage", "could not query", AIRLOCK_DOCTOR_WARN);
     }
 
     if (strcmp(w.architecture, "x86-64") == 0 || strcmp(w.architecture, "x86") == 0 || strcmp(w.architecture, "arm64") == 0 || strcmp(w.architecture, "arm") == 0) {
-        add_check(&r, "architecture", w.architecture, CELLAR_DOCTOR_OK);
+        add_check(&r, "architecture", w.architecture, AIRLOCK_DOCTOR_OK);
     } else {
-        add_check(&r, "architecture", w.architecture, CELLAR_DOCTOR_WARN);
+        add_check(&r, "architecture", w.architecture, AIRLOCK_DOCTOR_WARN);
     }
 
     if (strcmp(w.gfx_backend, "Vulkan") == 0) {
-        const char *picked = cellar_backend_pick(CELLAR_BACKEND_GRAPHICS);
+        const char *picked = airlock_backend_pick(AIRLOCK_BACKEND_GRAPHICS);
         if (strcmp(picked ? picked : "", "Vulkan") != 0) {
             add_check(&r, "renderer", "Vulkan requested but unavailable; fallback",
-                      CELLAR_DOCTOR_WARN);
+                      AIRLOCK_DOCTOR_WARN);
         } else {
-            add_check(&r, "renderer", w.gfx_backend, CELLAR_DOCTOR_OK);
+            add_check(&r, "renderer", w.gfx_backend, AIRLOCK_DOCTOR_OK);
         }
     } else if (strcmp(w.gfx_backend, "Software") == 0) {
         add_check(&r, "renderer", "software fallback (expect low performance)",
-                  CELLAR_DOCTOR_WARN);
+                  AIRLOCK_DOCTOR_WARN);
     } else {
-        add_check(&r, "renderer", w.gfx_backend, CELLAR_DOCTOR_OK);
+        add_check(&r, "renderer", w.gfx_backend, AIRLOCK_DOCTOR_OK);
     }
 
     if (w.dependencies[0]) {
@@ -1388,53 +1388,53 @@ cellar_status_t cellar_workspace_doctor(const char *root, const char *name,
             tn++;
         }
         free(dup);
-        if (cellar_runtime_init(w.path) != CELLAR_OK) {
+        if (airlock_runtime_init(w.path) != AIRLOCK_OK) {
             add_check(&r, "dependencies", "cannot init runtime manager",
-                      CELLAR_DOCTOR_WARN);
+                      AIRLOCK_DOCTOR_WARN);
         } else if (tn == 0) {
-            add_check(&r, "dependencies", "none required", CELLAR_DOCTOR_OK);
+            add_check(&r, "dependencies", "none required", AIRLOCK_DOCTOR_OK);
         } else {
             size_t k;
             int missing = 0;
             for (k = 0; k < tn; k++) {
-                cellar_runtime_kind_t kind = cellar_runtime_parse(tokens[k]);
-                if (!cellar_runtime_is_installed(kind))
+                airlock_runtime_kind_t kind = airlock_runtime_parse(tokens[k]);
+                if (!airlock_runtime_is_installed(kind))
                     missing++;
             }
             snprintf(path, sizeof path, "%zu required, %s", tn,
                      missing ? "some missing" : "all installed");
             add_check(&r, "dependencies", path,
-                      missing ? CELLAR_DOCTOR_WARN : CELLAR_DOCTOR_OK);
+                      missing ? AIRLOCK_DOCTOR_WARN : AIRLOCK_DOCTOR_OK);
         }
     } else {
-        add_check(&r, "dependencies", "no extra runtimes declared", CELLAR_DOCTOR_OK);
+        add_check(&r, "dependencies", "no extra runtimes declared", AIRLOCK_DOCTOR_OK);
     }
 
     if (w.exe_hash[0])
-        add_check(&r, "hash", w.exe_hash, CELLAR_DOCTOR_OK);
+        add_check(&r, "hash", w.exe_hash, AIRLOCK_DOCTOR_OK);
     else
-        add_check(&r, "hash", "not recorded", CELLAR_DOCTOR_WARN);
+        add_check(&r, "hash", "not recorded", AIRLOCK_DOCTOR_WARN);
 
-    if (cellar_workspace_profile_current(root, name, NULL) != CELLAR_OK)
+    if (airlock_workspace_profile_current(root, name, NULL) != AIRLOCK_OK)
         add_check(&r, "profile", "no saved profile; run profile apply",
-                  CELLAR_DOCTOR_WARN);
+                  AIRLOCK_DOCTOR_WARN);
     else
-        add_check(&r, "profile", "active profile present", CELLAR_DOCTOR_OK);
+        add_check(&r, "profile", "active profile present", AIRLOCK_DOCTOR_OK);
 
     *out = r;
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
-void cellar_doctor_report(const cellar_doctor_report_t *r)
+void airlock_doctor_report(const airlock_doctor_report_t *r)
 {
     size_t i;
     const char *labels[4] = { "unknown", "ok", "warn", "fail" };
     if (!r)
         return;
     for (i = 0; i < r->count; i++) {
-        const cellar_doctor_check_t *c = &r->checks[i];
+        const airlock_doctor_check_t *c = &r->checks[i];
         printf("  [%-6s] %-12s %s\n",
-               labels[c->result > CELLAR_DOCTOR_FAIL ? 0 : (int)c->result],
+               labels[c->result > AIRLOCK_DOCTOR_FAIL ? 0 : (int)c->result],
                c->name, c->detail);
     }
     printf("  launch doctor verdict: %s\n",
@@ -1472,28 +1472,28 @@ static void sanitize_line(char *line, size_t n)
     }
 }
 
-cellar_status_t cellar_workspace_support(const char *root, const char *name,
+airlock_status_t airlock_workspace_support(const char *root, const char *name,
                                          const char *out_path)
 {
-    cellar_workspace_t w;
-    cellar_doctor_report_t dr;
-    cellar_profile_point_t p;
+    airlock_workspace_t w;
+    airlock_doctor_report_t dr;
+    airlock_profile_point_t p;
     char buf[16384];
     char tmp[16384];
     FILE *f;
     size_t i;
     if (!root || !valid_name(name) || !out_path)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_workspace_doctor(root, name, &dr);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_workspace_doctor(root, name, &dr);
     f = fopen(out_path, "w");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    fprintf(f, "# Winaltor support bundle (%s)\n", w.name);
-    fprintf(f, "winaltor: %s\n", CELLAR_VERSION_STRING);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    fprintf(f, "# Airlock support bundle (%s)\n", w.name);
+    fprintf(f, "airlock: %s\n", AIRLOCK_VERSION_STRING);
     fprintf(f, "device-report:\n");
-    if (cellar_device_report(tmp, sizeof tmp) == CELLAR_OK) {
+    if (airlock_device_report(tmp, sizeof tmp) == AIRLOCK_OK) {
         char *save = NULL;
         char *tok = strtok_r(tmp, "\n", &save);
         while (tok) {
@@ -1510,41 +1510,41 @@ cellar_status_t cellar_workspace_support(const char *root, const char *name,
     for (i = 0; i < dr.count; i++) {
         const char *labels[4] = { "unknown", "ok", "warn", "fail" };
         fprintf(f, "  %-6s %-12s %s\n",
-                labels[dr.checks[i].result > CELLAR_DOCTOR_FAIL ? 0 :
+                labels[dr.checks[i].result > AIRLOCK_DOCTOR_FAIL ? 0 :
                        (int)dr.checks[i].result],
                 dr.checks[i].name, dr.checks[i].detail);
     }
     fprintf(f, "verdict: %s\n", dr.ready ? "ready" : "not-ready");
-    if (cellar_workspace_profile_current(root, name, &p) == CELLAR_OK) {
+    if (airlock_workspace_profile_current(root, name, &p) == AIRLOCK_OK) {
         fprintf(f, "profile:\n  label=%s\n  version=%u\n  trust=%s\n",
-                p.label, p.version, cellar_profile_trust_name(p.trust));
+                p.label, p.version, airlock_profile_trust_name(p.trust));
     }
     fprintf(f, "privacy: usernames and home paths redacted\n");
     fclose(f);
 
     /* Re-open and sanitize so the bundle never leaks host identity. */
     if (!read_text(out_path, tmp, sizeof tmp))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     snprintf(buf, sizeof buf, "%s", tmp);
     sanitize_line(buf, sizeof buf);
     write_text(out_path, buf);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 /* ---- diagnose ------------------------------------------------------------- */
 
-cellar_status_t cellar_workspace_diagnose(const char *log_path,
+airlock_status_t airlock_workspace_diagnose(const char *log_path,
                                           char *buffer, size_t cap)
 {
     FILE *f;
     char line[512];
     size_t off = 0;
     if (!log_path || !buffer || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     buffer[0] = '\0';
     f = fopen(log_path, "r");
     if (!f)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     while (fgets(line, sizeof line, f)) {
         char *nl = strchr(line, '\n');
         int used = 0;
@@ -1587,51 +1587,51 @@ cellar_status_t cellar_workspace_diagnose(const char *log_path,
     if (off == 0)
         snprintf(buffer, cap, "No obvious compatibility issues found in %s.\n",
                  log_path);
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 /* ---- permissions / safety ------------------------------------------------- */
 
-void cellar_workspace_permissions_text(uint32_t permissions,
+void airlock_workspace_permissions_text(uint32_t permissions,
                                        char *buf, size_t cap)
 {
     char line[512];
     line[0] = '\0';
-    if (permissions & CELLAR_PERM_NETWORK)
-        cellar_strlcat(line, sizeof line, "can use network; ");
+    if (permissions & AIRLOCK_PERM_NETWORK)
+        airlock_strlcat(line, sizeof line, "can use network; ");
     else
-        cellar_strlcat(line, sizeof line, "cannot use network; ");
-    if (permissions & CELLAR_PERM_SHARED_FILES)
-        cellar_strlcat(line, sizeof line, "can read selected shared folders; ");
+        airlock_strlcat(line, sizeof line, "cannot use network; ");
+    if (permissions & AIRLOCK_PERM_SHARED_FILES)
+        airlock_strlcat(line, sizeof line, "can read selected shared folders; ");
     else
-        cellar_strlcat(line, sizeof line, "cannot access shared folders; ");
-    if (permissions & CELLAR_PERM_CAMERA)
-        cellar_strlcat(line, sizeof line, "can use camera; ");
+        airlock_strlcat(line, sizeof line, "cannot access shared folders; ");
+    if (permissions & AIRLOCK_PERM_CAMERA)
+        airlock_strlcat(line, sizeof line, "can use camera; ");
     else
-        cellar_strlcat(line, sizeof line, "cannot use camera; ");
-    if (permissions & CELLAR_PERM_MIC)
-        cellar_strlcat(line, sizeof line, "can use microphone; ");
+        airlock_strlcat(line, sizeof line, "cannot use camera; ");
+    if (permissions & AIRLOCK_PERM_MIC)
+        airlock_strlcat(line, sizeof line, "can use microphone; ");
     else
-        cellar_strlcat(line, sizeof line, "cannot use microphone; ");
-    if (permissions & CELLAR_PERM_EXTERNAL_STORAGE)
-        cellar_strlcat(line, sizeof line, "can use external storage");
+        airlock_strlcat(line, sizeof line, "cannot use microphone; ");
+    if (permissions & AIRLOCK_PERM_EXTERNAL_STORAGE)
+        airlock_strlcat(line, sizeof line, "can use external storage");
     else
-        cellar_strlcat(line, sizeof line, "cannot use external storage");
+        airlock_strlcat(line, sizeof line, "cannot use external storage");
     if (buf && cap)
-        cellar_strlcpy(buf, cap, line);
+        airlock_strlcpy(buf, cap, line);
 }
 
-cellar_status_t cellar_workspace_safety_report(const char *root,
+airlock_status_t airlock_workspace_safety_report(const char *root,
                                                const char *name,
                                                char *buf, size_t cap)
 {
-    cellar_workspace_t w;
+    airlock_workspace_t w;
     char perms[512];
     if (!buf || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    if (cellar_workspace_load(root, name, &w) != CELLAR_OK)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    cellar_workspace_permissions_text(w.permissions, perms, sizeof perms);
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    if (airlock_workspace_load(root, name, &w) != AIRLOCK_OK)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    airlock_workspace_permissions_text(w.permissions, perms, sizeof perms);
     snprintf(buf, cap,
              "Safety report for %s:\n"
              "  sandbox:                 %s\n"
@@ -1648,24 +1648,24 @@ cellar_status_t cellar_workspace_safety_report(const char *root,
              w.source[0] ? w.source : "(not recorded)",
              w.runner,
              w.dependencies[0] ? w.dependencies : "(none)");
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 /* ---- device report -------------------------------------------------------- */
 
-cellar_status_t cellar_device_report(char *buf, size_t cap)
+airlock_status_t airlock_device_report(char *buf, size_t cap)
 {
     struct utsname u;
     long pages, pagesize;
     uint64_t mem_mb;
-    cellar_backend_t backends[8];
-    cellar_device_t devices[8];
+    airlock_backend_t backends[8];
+    airlock_device_t devices[8];
     size_t n, i;
     if (!buf || cap == 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     if (uname(&u) != 0) {
         snprintf(buf, cap, "unavailable");
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
     pages = sysconf(_SC_PHYS_PAGES);
     pagesize = sysconf(_SC_PAGESIZE);
@@ -1679,62 +1679,62 @@ cellar_status_t cellar_device_report(char *buf, size_t cap)
              "Audio:    %s\n",
              u.sysname, u.release, u.machine, sizeof(void *) * 8,
              (unsigned long long)mem_mb,
-             cellar_backend_pick(CELLAR_BACKEND_GRAPHICS) ?
-                cellar_backend_pick(CELLAR_BACKEND_GRAPHICS) : "unknown",
-             cellar_backend_pick(CELLAR_BACKEND_AUDIO) ?
-                cellar_backend_pick(CELLAR_BACKEND_AUDIO) : "unknown");
+             airlock_backend_pick(AIRLOCK_BACKEND_GRAPHICS) ?
+                airlock_backend_pick(AIRLOCK_BACKEND_GRAPHICS) : "unknown",
+             airlock_backend_pick(AIRLOCK_BACKEND_AUDIO) ?
+                airlock_backend_pick(AIRLOCK_BACKEND_AUDIO) : "unknown");
     /* Show render-path options. */
-    n = cellar_backend_list(CELLAR_BACKEND_GRAPHICS, backends,
+    n = airlock_backend_list(AIRLOCK_BACKEND_GRAPHICS, backends,
                             sizeof backends / sizeof backends[0]);
     if (n && strlen(buf) + 16 < cap) {
-        cellar_strlcat(buf, cap, "Paths:    ");
+        airlock_strlcat(buf, cap, "Paths:    ");
         for (i = 0; i < n; i++) {
             char tmp[64];
             snprintf(tmp, sizeof tmp, "%s%s", i ? "," : "", backends[i].name);
-            cellar_strlcat(buf, cap, tmp);
+            airlock_strlcat(buf, cap, tmp);
         }
-        cellar_strlcat(buf, cap, "\n");
+        airlock_strlcat(buf, cap, "\n");
     }
-    n = cellar_device_list(devices, sizeof devices / sizeof devices[0]);
+    n = airlock_device_list(devices, sizeof devices / sizeof devices[0]);
     if (n && strlen(buf) + 16 < cap) {
-        cellar_strlcat(buf, cap, "Devices:  ");
+        airlock_strlcat(buf, cap, "Devices:  ");
         for (i = 0; i < n; i++) {
             char tmp[96];
             snprintf(tmp, sizeof tmp, "%s%s", i ? "," : "", devices[i].name);
-            cellar_strlcat(buf, cap, tmp);
+            airlock_strlcat(buf, cap, tmp);
         }
-        cellar_strlcat(buf, cap, "\n");
+        airlock_strlcat(buf, cap, "\n");
     }
-    return CELLAR_OK;
+    return AIRLOCK_OK;
 }
 
 /* ---- shader cache --------------------------------------------------------- */
 
-uint64_t cellar_workspace_shader_size(const char *root, const char *name)
+uint64_t airlock_workspace_shader_size(const char *root, const char *name)
 {
     char ws[640], path[720];
     if (!root || !valid_name(name))
         return 0;
     ws_dir(ws, sizeof ws, root, name);
-    cellar_path_join(path, sizeof path, ws, "shadercache");
+    airlock_path_join(path, sizeof path, ws, "shadercache");
     return dir_exists(path) ? dir_size_rec(path) : 0;
 }
 
-cellar_status_t cellar_workspace_shader_clear(const char *root,
+airlock_status_t airlock_workspace_shader_clear(const char *root,
                                               const char *name)
 {
     char ws[640], path[720], bak[720];
     if (!root || !valid_name(name))
-        return CELLAR_ERR_INVALID_ARGUMENT;
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
     ws_dir(ws, sizeof ws, root, name);
-    cellar_path_join(path, sizeof path, ws, "shadercache");
+    airlock_path_join(path, sizeof path, ws, "shadercache");
     if (dir_exists(path)) {
         snprintf(bak, sizeof bak, "%s/shadercache.bak-%u", ws,
                  (unsigned)getpid());
         if (rename(path, bak) != 0)
-            return CELLAR_ERR_INVALID_ARGUMENT;
+            return AIRLOCK_ERR_INVALID_ARGUMENT;
     }
-    if (cellar_mkdir_p(path) != 0)
-        return CELLAR_ERR_INVALID_ARGUMENT;
-    return CELLAR_OK;
+    if (airlock_mkdir_p(path) != 0)
+        return AIRLOCK_ERR_INVALID_ARGUMENT;
+    return AIRLOCK_OK;
 }

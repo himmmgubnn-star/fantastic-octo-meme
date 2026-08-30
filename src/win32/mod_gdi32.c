@@ -5,9 +5,9 @@
  */
 #include <stdint.h>
 
-#include "cellar/cellar.h"
-#include "cellar/display.h"
-#include "cellar/win32.h"
+#include "airlock/airlock.h"
+#include "airlock/display.h"
+#include "airlock/win32.h"
 
 #ifdef _WIN32
 #define WINAPI __stdcall
@@ -27,21 +27,21 @@ typedef int BOOL;
 #define BITSPIXEL  12
 #define VREFRESH   116
 
-static HDC WINAPI cellar_CreateCompatibleDC(HDC hdc)
+static HDC WINAPI airlock_CreateCompatibleDC(HDC hdc)
 {
     UNUSED(hdc);
     return (HDC)(uintptr_t)0xD00;
 }
 
-static BOOL WINAPI cellar_DeleteDC(HDC hdc)
+static BOOL WINAPI airlock_DeleteDC(HDC hdc)
 {
     UNUSED(hdc);
     return 1;
 }
 
-static int WINAPI cellar_GetDeviceCaps(HDC hdc, int index)
+static int WINAPI airlock_GetDeviceCaps(HDC hdc, int index)
 {
-    const cellar_monitor_t *m = cellar_display_primary(cellar_display_current());
+    const airlock_monitor_t *m = airlock_display_primary(airlock_display_current());
     UNUSED(hdc);
     if (!m)
         return 0;
@@ -57,14 +57,14 @@ static int WINAPI cellar_GetDeviceCaps(HDC hdc, int index)
     }
 }
 
-static const cellar_export_entry_t k_exports[] = {
-    { "CreateCompatibleDC", (void *)&cellar_CreateCompatibleDC },
-    { "DeleteDC",           (void *)&cellar_DeleteDC },
-    { "GetDeviceCaps",      (void *)&cellar_GetDeviceCaps },
+static const airlock_export_entry_t k_exports[] = {
+    { "CreateCompatibleDC", (void *)&airlock_CreateCompatibleDC },
+    { "DeleteDC",           (void *)&airlock_DeleteDC },
+    { "GetDeviceCaps",      (void *)&airlock_GetDeviceCaps },
 };
 
-static const cellar_module_t k_mod = {
+static const airlock_module_t k_mod = {
     "gdi32.dll", k_exports, sizeof k_exports / sizeof k_exports[0]
 };
 
-const cellar_module_t *cellar_win32_module_gdi32(void) { return &k_mod; }
+const airlock_module_t *airlock_win32_module_gdi32(void) { return &k_mod; }

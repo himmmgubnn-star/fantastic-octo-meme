@@ -1,15 +1,15 @@
 /*
  * gen_sample_pe.c — writes a minimal, valid PE32 executable to disk.
  *
- * Cellar needs Windows executables to load, but building one on Linux usually
+ * Airlock needs Windows executables to load, but building one on Linux usually
  * requires MinGW. This tiny generator synthesizes a self-contained PE that
  * imports from several system DLLs (KERNEL32, d3d11, XInput, winmm, ws2_32)
  * and exports a couple of symbols, so you can exercise the loader AND the
  * Application Compatibility Analyzer without any Windows toolchain.
  *
  *   make sample        ->  writes samples/hello.exe
- *   cellar samples/hello.exe     (load/report)
- *   cellar analyze samples/hello.exe   (compatibility analysis)
+ *   airlock samples/hello.exe     (load/report)
+ *   airlock analyze samples/hello.exe   (compatibility analysis)
  *
  * SPDX-License-Identifier: MIT
  */
