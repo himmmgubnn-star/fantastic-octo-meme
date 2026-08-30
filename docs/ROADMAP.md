@@ -166,6 +166,10 @@ several Windows toolchains run unmodified.
 - ✅ **Device capability report + container alias** — `device report`,
   `container create`
 - ✅ **Community profile import/export** with trust categories
+- ✅ **Container/prefix manager upgrades** — `prefix create --arch win32|win64`
+  (architecture fixed at creation), `prefix clone`, `prefix export|import`,
+  generic `prefix set|settings` (runner, resolution, Box64 preset, CPU/frame
+  limits, ESync/FSync, DLL overrides), per-container runner
 - ✅ **Unit tests** — `test_workspace`
 - 🔶 MSI database parsing, real sandboxing, frame overlay, hardware governor,
   touch-control editor, external-display presets, thermal protection

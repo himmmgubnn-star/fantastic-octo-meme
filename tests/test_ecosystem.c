@@ -164,6 +164,46 @@ static void test_prefix_shell_runtime(const char *root)
     cellar_prefix_delete(root, "Game");
 }
 
+static void test_prefix_extended(const char *root)
+{
+    cellar_prefix_info_t info;
+    char bak[512], v[64];
+
+    CHECK(cellar_prefix_create_arch(root, "Old32", "win32") == CELLAR_OK,
+          "create win32 prefix");
+    CHECK(cellar_prefix_info(root, "Old32", &info) == CELLAR_OK, "info win32");
+    CHECK(strcmp(info.arch, "win32") == 0, "arch is win32");
+
+    /* clone */
+    CHECK(cellar_prefix_clone(root, "Old32", "Old32Copy") == CELLAR_OK, "clone");
+    CHECK(cellar_prefix_info(root, "Old32Copy", &info) == CELLAR_OK &&
+          info.exists, "clone exists");
+    CHECK(strcmp(info.arch, "win32") == 0, "clone arch preserved");
+
+    /* container-level settings */
+    CHECK(cellar_prefix_set_setting(root, "Old32", "resolution", "1920x1080")
+          == CELLAR_OK, "set resolution");
+    CHECK(cellar_prefix_get_setting(root, "Old32", "resolution", v, sizeof v)
+          == CELLAR_OK && strcmp(v, "1920x1080") == 0, "get resolution");
+    CHECK(cellar_prefix_set_setting(root, "Old32", "resolution", "1280x720")
+          == CELLAR_OK, "update resolution");
+    CHECK(cellar_prefix_get_setting(root, "Old32", "resolution", v, sizeof v)
+          == CELLAR_OK && strcmp(v, "1280x720") == 0, "updated resolution");
+    CHECK(cellar_prefix_get_setting(root, "Old32", "version_mode", v, sizeof v)
+          == CELLAR_OK && strcmp(v, "2") == 0, "version_mode intact");
+
+    /* export/import round-trip */
+    snprintf(bak, sizeof bak, "%s/old32.cbk", root);
+    CHECK(cellar_prefix_export(root, "Old32", bak) == CELLAR_OK, "export");
+    CHECK(cellar_prefix_delete(root, "Old32") == CELLAR_OK, "delete old32");
+    CHECK(cellar_prefix_import(root, "Old32", bak) == CELLAR_OK, "import");
+    CHECK(cellar_prefix_info(root, "Old32", &info) == CELLAR_OK && info.exists,
+          "imported exists");
+
+    cellar_prefix_delete(root, "Old32Copy");
+    cellar_prefix_delete(root, "Old32");
+}
+
 static void test_desktop_debug(const char *dir)
 {
     cellar_desktop_entry_t de;
@@ -213,6 +253,7 @@ int main(void)
 
     test_inspect_and_db(tmp);
     test_prefix_shell_runtime(tmp);
+    test_prefix_extended(tmp);
     test_desktop_debug(tmp);
     test_lab();
 

@@ -87,6 +87,10 @@ cellar inspect program.exe       # Application Inspector (arch, DLLs, TLS, runti
 cellar analyze program.exe       # Application Compatibility Analysis
 cellar db list | db show APP     # compatibility database
 cellar prefix create Game        # isolated Windows environment (bottle)
+cellar prefix create Game --arch win32   # force a 32-bit container
+cellar prefix clone|import|export Game   # copy / archive a container
+cellar prefix set Game box64 performance # container-level settings
+cellar prefix settings Game
 cellar prefix launch Game game.exe
 cellar prefix backup|restore|delete Game
 cellar runtime list|install vcruntime|dotnet|directx|fonts|systemlibs
@@ -261,7 +265,9 @@ Cellar ships a performance kit aimed at game-like Windows workloads:
 - **Plugins & backend selection** — Vulkan→OpenGL→Software / ALSA→PipeWire→WAV hot-selection, `.so` plugin loading.
 - **Testing** — 7 unit suites (loader, audio, perf, compat, kit, ecosystem, workspace) plus a deterministic loader fuzz harness (`make fuzz`) and `cellar test` (compatibility lab), all clean under ASan/UBSan.
 - **Inspector + compatibility DB** — `cellar inspect` / `cellar db`.
-- **Prefix manager** — create / backup / restore / delete isolated bottles.
+- **Prefix manager** — create (win32/win64) / clone / export / import /
+  backup / restore / delete isolated bottles, plus generic container-level
+  settings (runner, resolution, Box64 preset, CPU/frame limits, ESync/FSync).
 - **COM / OLE** — IUnknown, GUIDs, apartments, class registration.
 - **Shell / desktop / display / security / locale / print / devices / a11y.**
 - **Winaltor workspace layer** — one isolated environment per app, guided

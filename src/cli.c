@@ -397,7 +397,8 @@ static int cmd_prefix(int argc, char **argv)
     const char *root = cellar_prefix_dir();
     const char *sub;
     if (argc < 3) {
-        fprintf(stderr, "cellar: prefix needs create|list|info|delete|backup|restore|launch\n");
+        fprintf(stderr, "cellar: prefix needs create|list|info|delete|clone|"
+                        "import|export|set|settings|backup|restore|launch\n");
         return 1;
     }
     sub = argv[2];
@@ -407,8 +408,9 @@ static int cmd_prefix(int argc, char **argv)
         size_t i;
         printf("Prefixes in %s (%zu):\n", root, n);
         for (i = 0; i < n; i++)
-            printf("  %-16s  %s  gfx=%s audio=%s\n",
-                   list[i].name, list[i].path, list[i].gfx, list[i].audio);
+            printf("  %-16s  %s  gfx=%s audio=%s arch=%s runner=%s\n",
+                   list[i].name, list[i].path, list[i].gfx, list[i].audio,
+                   list[i].arch, list[i].runner);
         return 0;
     }
     if (argc < 4) {
@@ -416,11 +418,80 @@ static int cmd_prefix(int argc, char **argv)
         return 1;
     }
     if (strcmp(sub, "create") == 0) {
-        if (cellar_prefix_create(root, argv[3]) != CELLAR_OK) {
+        const char *arch = NULL;
+        if (argc > 4) {
+            if (strncmp(argv[4], "--arch=", 7) == 0)
+                arch = argv[4] + 7;
+            else if (strcmp(argv[4], "--arch") == 0 && argc > 5)
+                arch = argv[5];
+        }
+        if (cellar_prefix_create_arch(root, argv[3], arch) != CELLAR_OK) {
             fprintf(stderr, "cellar: failed to create prefix '%s'\n", argv[3]);
             return 1;
         }
-        printf("created prefix %s/%s\n", root, argv[3]);
+        printf("created prefix %s/%s (arch=%s)\n", root, argv[3],
+               arch ? arch : "win64");
+        return 0;
+    }
+    if (strcmp(sub, "clone") == 0) {
+        const char *dst = argc > 4 ? argv[4] : NULL;
+        if (!dst) {
+            fprintf(stderr, "cellar: prefix clone SRC DST\n");
+            return 1;
+        }
+        if (cellar_prefix_clone(root, argv[3], dst) != CELLAR_OK)
+            return 1;
+        printf("cloned %s -> %s\n", argv[3], dst);
+        return 0;
+    }
+    if (strcmp(sub, "import") == 0) {
+        const char *file = argc > 4 ? argv[4] : NULL;
+        if (!file) {
+            fprintf(stderr, "cellar: prefix import NAME FILE\n");
+            return 1;
+        }
+        if (cellar_prefix_import(root, argv[3], file) != CELLAR_OK)
+            return 1;
+        printf("imported %s from %s\n", argv[3], file);
+        return 0;
+    }
+    if (strcmp(sub, "export") == 0) {
+        const char *file = argc > 4 ? argv[4] : NULL;
+        if (!file) {
+            fprintf(stderr, "cellar: prefix export NAME FILE\n");
+            return 1;
+        }
+        if (cellar_prefix_export(root, argv[3], file) != CELLAR_OK)
+            return 1;
+        printf("exported %s -> %s\n", argv[3], file);
+        return 0;
+    }
+    if (strcmp(sub, "set") == 0) {
+        const char *key, *val;
+        if (argc < 6) {
+            fprintf(stderr, "cellar: prefix set NAME KEY VALUE\n");
+            return 1;
+        }
+        key = argv[4];
+        val = argv[5];
+        if (cellar_prefix_set_setting(root, argv[3], key, val) != CELLAR_OK)
+            return 1;
+        printf("%s.%s=%s\n", argv[3], key, val);
+        return 0;
+    }
+    if (strcmp(sub, "settings") == 0) {
+        const char *keys[16] = { "version_mode", "gfx", "audio", "arch",
+                                 "runner", "resolution", "virtual_desktop",
+                                 "vd_width", "vd_height", "vd_dpi", "box64",
+                                 "cpu_core_limit", "frame_cap", "esync",
+                                 "fsync", "dll_overrides" };
+        size_t i;
+        for (i = 0; i < sizeof keys / sizeof keys[0]; i++) {
+            char v[256];
+            if (cellar_prefix_get_setting(root, argv[3], keys[i], v,
+                                          sizeof v) == CELLAR_OK)
+                printf("%s=%s\n", keys[i], v);
+        }
         return 0;
     }
     if (strcmp(sub, "delete") == 0) {
@@ -440,6 +511,8 @@ static int cmd_prefix(int argc, char **argv)
         printf("Version:  %s\n", cellar_version_profile(info.version_mode)->name);
         printf("Graphics: %s\n", info.gfx);
         printf("Audio:    %s\n", info.audio);
+        printf("Arch:     %s\n", info.arch);
+        printf("Runner:   %s\n", info.runner);
         return 0;
     }
     if (strcmp(sub, "backup") == 0) {
@@ -997,7 +1070,8 @@ static void usage(FILE *out)
         "  cellar inspect game.exe       PE inspector (arch, DLLs, TLS, runtimes)\n"
         "  cellar analyze game.exe       application compatibility analysis\n"
         "  cellar db list|show APP       compatibility database\n"
-        "  cellar prefix create|list|info|delete|backup|restore|launch\n"
+        "  cellar prefix create|list|info|delete|clone|import|export\n"
+        "        |set|settings|backup|restore|launch\n"
         "  cellar runtime list|install|uninstall KIND\n"
         "  cellar app add NAME [SRC] [--kind exe|msi|import|portable]\n"
         "  cellar app list|show|remove|set|run|doctor|repair NAME ...\n"
