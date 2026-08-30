@@ -1,0 +1,71 @@
+cmake_minimum_required(VERSION 3.10)
+project(cellar C)
+
+set(CMAKE_C_STANDARD 11)
+set(CMAKE_C_STANDARD_REQUIRED ON)
+
+if(NOT CMAKE_BUILD_TYPE)
+  set(CMAKE_BUILD_TYPE Release)
+endif()
+
+# ---------------------------------------------------------------------------
+# Sources shared by the library, the CLI, and the tests.
+# ---------------------------------------------------------------------------
+set(CELLAR_LIB_SOURCES
+  src/loader/cellar_util.c
+  src/loader/pe.c
+  src/loader/loader.c
+  src/win32/api.c
+  src/win32/mod_kernel32.c
+  src/win32/mod_winmm.c
+  src/win32/init.c
+  src/port/posix.c
+  src/audio/audio.c
+  src/perf/perf.c
+)
+if(CELLAR_AUDIO_ALSA)
+  list(APPEND CELLAR_LIB_SOURCES src/audio/alsa.c)
+endif()
+
+set(CELLAR_LIB_HEADERS
+  include/cellar/cellar.h
+  include/cellar/pe.h
+  include/cellar/loader.h
+  include/cellar/win32.h
+  include/cellar/platform.h
+  include/cellar/audio.h
+  include/cellar/perf.h
+)
+
+add_library(cellar STATIC ${CELLAR_LIB_SOURCES} ${CELLAR_LIB_HEADERS})
+target_include_directories(cellar PUBLIC include)
+
+if(CELLAR_AUDIO_ALSA)
+  find_package(ALSA REQUIRED)
+  target_link_libraries(cellar PUBLIC ALSA::ALSA)
+  target_compile_definitions(cellar PUBLIC CELLAR_AUDIO_ALSA)
+endif()
+
+add_executable(cellar-cli src/cli.c)
+target_link_libraries(cellar-cli PRIVATE cellar)
+
+enable_testing()
+add_executable(test_loader tests/test_loader.c)
+target_link_libraries(test_loader PRIVATE cellar)
+add_test(NAME loader COMMAND test_loader)
+
+# ---------------------------------------------------------------------------
+# Android NDK support.
+#
+# Cross-compile with the NDK toolchain:
+#   cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+#         -DANDROID_ABI=arm64-v8a \
+#         -DANDROID_PLATFORM=android-24 \
+#         -B build-android
+#   cmake --build build-android
+#
+# On Android the CLI is built (via cellar-cli target name `cellar-cli`); a
+# packaged app would link libcellar.a and call cellar_win32_init() itself.
+# Audio defaults to the null/WAV sink on Android (no ALSA) and can later be
+# replaced with an AAudio/Oboe backend.
+# ---------------------------------------------------------------------------

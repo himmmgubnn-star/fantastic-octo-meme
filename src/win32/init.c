@@ -8,8 +8,10 @@
 
 /* One accessor per module (defined in each mod_*.c file). */
 const cellar_module_t *cellar_win32_module_kernel32(void);
+const cellar_module_t *cellar_win32_module_winmm(void);
 
 void cellar_win32_init(void)
 {
     cellar_win32_register_module(cellar_win32_module_kernel32());
+    cellar_win32_register_module(cellar_win32_module_winmm());
 }

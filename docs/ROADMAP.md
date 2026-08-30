@@ -67,7 +67,27 @@ several Windows toolchains run unmodified.
 
 **Definition of done:** a simple Win32 GUI app opens a window and renders.
 
-## Milestone 4 — Robustness & ecosystem
+## Milestone 4.5 — Portability, performance & audio (current)
+
+> **Goal:** run anywhere, run fast, and make sound. Two cross-cutting subsystems
+> that every Windows program needs.
+
+- ✅ **Portability layer** (`include/cellar/platform.h`, `src/port/posix.c`)
+  - Works on **Linux and Android** (both ship the POSIX surface)
+  - Monotonic clock, `nanosleep`, perf counter, `FILETIME` system time
+  - pid/tid, zero-copy `mmap` file reads
+- ✅ **Audio subsystem** (`include/cellar/audio.h`, `src/audio/`)
+  - Backend abstraction → WAV file sink (dependency-free, default) | ALSA | null
+  - `WINMM.dll` (winmm) module: `waveOut*`, `PlaySoundA`, `timeGetTime`
+  - Games' audio routes through the backend, never touching hardware directly
+- ✅ **Performance kit** (`include/cellar/perf.h`, `src/perf/`)
+  - Counters, tunables (`--papi`, mmap threshold, large pages), tracing ring
+  - mmap-backed zero-copy file loading; optional page pre-faulting (`--papi=1`)
+  - high-performance scheduling hint
+- ✅ **CMake build** with an Android NDK toolchain recipe + CLI subcommands
+  (`--perf`, `--platform`, `--audio`, `--papi=1`) + unit tests for all three
+
+## Milestone 5 — Robustness & ecosystem
 
 - ⬜ Loader hardening (more fuzzing, corpus testing)
 - ⬜ A `winecfg`-style configuration surface

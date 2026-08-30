@@ -1,6 +1,6 @@
 # Cellar
 
-**Cellar** is a clean-room, Wine-style **Windows compatibility layer for Linux**, written in **C11**.
+**Cellar** is a clean-room, Wine-style **Windows compatibility layer for Linux and Android**, written in **C11**.
 
 Its goal is to let Windows programs run on Linux by providing the pieces Windows applications expect from the operating system:
 
@@ -29,18 +29,33 @@ By contrast, an interpreter or JIT language injects a runtime dependency, and Ru
 
 ## Building
 
-Requires a C11 compiler (GCC or Clang), GNU Make, and `ar`.
+Requires a C11 compiler (GCC or Clang), GNU Make (or CMake), and `ar`.
 
 ```sh
 make            # build the `cellar` CLI + libcellar.a
-make test       # build and run the unit tests
+make test       # build and run the unit tests (loader + audio + perf)
 make sample     # generate a synthetic test PE -> samples/hello.exe
+make ALSA=1     # also build the real ALSA audio backend (needs libasound2-dev)
 make clean      # remove build artifacts
 ```
 
 Optional knobs: `CC`, `CFLAGS`, and `CELLAR_LOG_LEVEL` (0–4, default 2 = info).
 
-No third-party libraries are used — everything is C11 + POSIX.
+No third-party libraries are required — everything is C11 + POSIX. The only
+optional dependency is ALSA for real audio output on desktop Linux.
+
+**Android (NDK):** Cellar's platform layer targets Linux and Android with one
+POSIX implementation. Cross-compile with the NDK toolchain through CMake:
+
+```sh
+cmake -DCMAKE_TOOLCHAIN_FILE=$ANDROID_NDK/build/cmake/android.toolchain.cmake \
+      -DANDROID_ABI=arm64-v8a -DANDROID_PLATFORM=android-24 -B build-android
+cmake --build build-android      # produces libcellar.a (+ cellar-cli)
+```
+
+A packaged Android app would link `libcellar.a` and call `cellar_win32_init()`
+itself. Audio on Android defaults to the WAV/null sink; an AAudio/Oboe backend
+can be dropped in later.
 
 ## Quick start
 
@@ -67,10 +82,42 @@ $ ./build/cellar samples/hello.exe
 `make sample` synthesizes a real, loadable PE without MinGW — handy for exercising the loader on a machine with no Windows toolchain. You can also point `cellar` at any genuine `.exe`.
 
 ```sh
-cellar program.exe          # load + report a Windows executable
-cellar --list-modules       # show registered Win32 modules & exports
+cellar program.exe               # load + report a Windows executable
+cellar --list-modules            # show registered Win32 modules & exports
+cellar --platform                # OS / perf-hint info
+cellar --perf program.exe        # load, then dump perf counters + tracing
+cellar --papi=1 program.exe      # pre-fault pages (faster steady-state)
+cellar --audio out.wav           # render a tone through the audio backend
 cellar --help
 ```
+
+## Audio
+
+Cellar plays Windows audio through a pluggable backend:
+
+- **WAV file sink** (default, dependency-free) — every `waveOutWrite` a game
+  makes is captured to a real RIFF/WAVE file (`CELLAR_WAV_OUT` overrides the
+  default `cellar-out.wav`).
+- **ALSA** (`make ALSA=1`) — real, low-latency output on desktop Linux.
+- **Null sink** — for platforms without an audio device (e.g. early Android).
+
+The `WINMM.dll` module (`waveOut*`, `PlaySoundA`, `timeGetTime`) routes through
+this backend, so games use familiar Win32 multimedia APIs regardless of the
+underlying OS audio system.
+
+## Performance & gaming optimization
+
+Cellar ships a performance kit aimed at game-like Windows workloads:
+
+- **Zero-copy loading** — large executables are memory-mapped rather than
+  fully copied.
+- **Page pre-faulting** (`--papi=1`) — touches every mapped page at load time
+  so execution doesn't stall on page-fault latency.
+- **Counters & tracing** (`--perf`) — images loaded, imports resolved, bytes
+  mapped, audio bytes, plus a timestamped trace ring for profiling.
+- **Scheduling hint** (`--platform`) — asks the OS for high-performance
+  scheduling where permitted.
+- **Tunables** — mmap threshold, large pages, papi via `cellar_perf_options_t`.
 
 ## What works today
 
@@ -78,8 +125,11 @@ cellar --help
 - **Section mapping** — assembles a section-aligned virtual image so RVA lookups and the entry point behave as on Windows.
 - **Import resolution** — walks each DLL's import table and binds thunks to Cellar's native Win32 functions via an O(1) export registry.
 - **Export indexing** — parses a module's export directory into a name index.
-- **Win32 registry** — a first `KERNEL32.dll` module with initial implementations (`ExitProcess`, `GetStdHandle`, `WriteFile`, `LoadLibraryA`, `GetProcAddress`, `GetLastError`, …).
-- **Unit tests** — build a synthetic PE in memory and verify the whole pipeline, plus negative cases; runs clean under AddressSanitizer/UBsan.
+- **Win32 registry** — `KERNEL32.dll` (`ExitProcess`, `GetStdHandle`, `WriteFile`, `LoadLibraryA`, `GetProcAddress`, …) and `WINMM.dll` (multimedia/audio) modules.
+- **Portability layer** — one POSIX implementation serves Linux and Android (clocks, sleep, mmap reads, pid/tid).
+- **Audio subsystem** — backend dispatch with a testable WAV sink and optional ALSA.
+- **Performance kit** — counters, tunables, tracing, pre-faulting, zero-copy mmap loads.
+- **Unit tests** — loader + audio + perf suites driven by a synthetic PE and a real WAV output; all run clean under AddressSanitizer/UBsan.
 
 ## Layout
 
@@ -89,6 +139,9 @@ include/cellar/          public headers
   pe.h                   clean-room PE/COFF format definitions
   loader.h               loader API + in-memory image model
   win32.h                Win32 export registry API
+  platform.h             OS portability seam (Linux + Android)
+  audio.h                audio backend API
+  perf.h                 performance counters/tunables/tracing
 src/
   loader/
     cellar_util.c        status strings, logging, endian reads, hashing
@@ -96,11 +149,21 @@ src/
     loader.c             full image-load pipeline, imports, exports
   win32/
     api.c                export registry (module + function lookup)
-    mod_kernel32.c       first KERNEL32.dll implementation
+    mod_kernel32.c       KERNEL32.dll implementation
+    mod_winmm.c          WINMM.dll (multimedia/audio) implementation
     init.c               module registration bootstrap
+  port/
+    posix.c              POSIX platform layer (Linux + Android/Bionic)
+  audio/
+    audio.c              backend dispatch + WAV file sink
+    alsa.c               optional ALSA backend (make ALSA=1)
+  perf/
+    perf.c               performance kit
   cli.c                  command-line driver
 tests/
-  test_loader.c          unit tests (synthetic-PE driven)
+  test_loader.c          loader unit tests (synthetic-PE driven)
+  test_audio.c           audio backend / WAV sink tests
+  test_perf.c            perf counters / ring / tunables tests
 tools/
   gen_sample_pe.c        writes a minimal valid PE for testing
 docs/

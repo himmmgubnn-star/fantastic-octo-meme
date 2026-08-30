@@ -10,13 +10,19 @@
  *
  * SPDX-License-Identifier: MIT
  */
+/* Expose setenv under strict feature-test defaults. */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #include "cellar/cellar.h"
+#include "cellar/audio.h"
 #include "cellar/loader.h"
 #include "cellar/pe.h"
+#include "cellar/perf.h"
+#include "cellar/platform.h"
 #include "cellar/win32.h"
 
 static const char *machine_name(uint16_t m)
@@ -43,6 +49,91 @@ static const char *subsystem_name(uint16_t s)
 static const char *architecture_word(const cellar_image_t *img)
 {
     return img->opt.magic == CELLAR_PE_MAGIC_PE32 ? "32-bit" : "64-bit";
+}
+
+/* ---- Perf report ---------------------------------------------------------- */
+
+static void dump_perf(void)
+{
+    const cellar_perf_counters_t *c = cellar_perf_counters();
+    const cellar_perf_options_t *opt = cellar_perf_options();
+    cellar_perf_sample_t ring[64];
+    size_t n, i;
+
+    printf("== performance ==\n");
+    printf("  images loaded      %llu\n", (unsigned long long)c->images_loaded);
+    printf("  imports resolved   %llu\n", (unsigned long long)c->imports_resolved);
+    printf("  bytes mapped       %llu\n", (unsigned long long)c->map_bytes);
+    printf("  mmap file reads    %llu\n", (unsigned long long)c->mmap_reads);
+    printf("  audio bytes        %llu\n", (unsigned long long)c->audio_bytes);
+    printf("  prefault calls     %llu\n", (unsigned long long)c->prefault_calls);
+
+    printf("  options: papi=%d mmap_threshold=%d large_pages=%d\n",
+           opt->papi, opt->mmap_threshold, opt->large_pages);
+
+    n = cellar_perf_ring_drain(ring, 64);
+    if (n) {
+        printf("  trace:\n");
+        for (i = 0; i < n; i++)
+            printf("    t=%llums %-24s %llu\n",
+                   (unsigned long long)ring[i].t_ms, ring[i].label,
+                   (unsigned long long)ring[i].value);
+    }
+}
+
+static int dump_audio_sink(const char *path)
+{
+    const cellar_audio_backend_t *backend = cellar_audio_default_backend();
+    cellar_audio_device_t dev;
+    cellar_audio_format_t fmt;
+    uint8_t buf[4096];
+    size_t i;
+    cellar_status_t st;
+
+    memset(&fmt, 0, sizeof fmt);
+    fmt.format_tag = 1;
+    fmt.channels = 2;
+    fmt.sample_rate = 44100;
+    fmt.bits_per_sample = 16;
+    fmt.block_align = (uint16_t)(2 * fmt.channels);
+    fmt.avg_bytes_per_sec = fmt.sample_rate * fmt.block_align;
+
+    /* Route the WAV sink to the requested output path (default is fine if
+     * no path is given and CELLAR_WAV_OUT is unset). */
+    if (path && *path)
+        setenv("CELLAR_WAV_OUT", path, 1);
+
+    st = cellar_audio_open(&dev, backend, &fmt);
+    if (st != CELLAR_OK) {
+        fprintf(stderr, "cellar: audio open failed (%s)\n",
+                cellar_status_string(st));
+        return 1;
+    }
+
+    printf("== audio ==\n");
+    printf("  backend:  %s\n", backend->name);
+    printf("  format:   %u Hz, %u ch, %u-bit PCM\n",
+           fmt.sample_rate, fmt.channels, fmt.bits_per_sample);
+    printf("  output:   %s\n", path);
+
+    /* Generate a short 440 Hz tone so the WAV sink yields a real, audible
+     * file, and the ALSA backend produces sound. */
+    {
+        int16_t *samples = (int16_t *)buf;
+        size_t nsamples = sizeof buf / sizeof(int16_t);
+        for (i = 0; i < nsamples; i += 2) {
+            double t = (double)i / (double)(fmt.sample_rate * 2);
+            double ph = t * 440.0 * 2.0 * 3.141592653589793;
+            int16_t s = (int16_t)(12000.0 * ((ph - (int)ph) > 0.5 ? 1 : -1));
+            samples[i] = s;     /* left  */
+            samples[i + 1] = s; /* right */
+        }
+        for (i = 0; i < 8; i++)   /* ~0.75 s at 44100 Hz, mono-ish buffer */
+            cellar_audio_write(&dev, buf, sizeof buf);
+    }
+
+    cellar_audio_close(&dev);
+    return 0;
 }
 
 static int dump_image(const char *path)
@@ -96,23 +187,48 @@ static int dump_image(const char *path)
     return 0;
 }
 
+static void dump_platform(void)
+{
+    printf("== platform ==\n");
+    printf("  pid              %u\n", cellar_getpid());
+    printf("  tid              %u\n", cellar_gettid());
+    printf("  monotonic ms     %llu\n",
+           (unsigned long long)cellar_monotonic_ms());
+    printf("  perf freq        %llu counts/sec\n",
+           (unsigned long long)cellar_perf_frequency());
+    printf("  high-performance hint: ");
+    if (cellar_perf_hint_high_performance() == CELLAR_OK)
+        printf("applied\n");
+    else
+        printf("not supported here\n");
+}
+
 static void usage(FILE *out)
 {
     fprintf(out,
-        "cellar %s — a Windows compatibility layer for Linux\n"
+        "cellar %s — a Windows compatibility layer for Linux & Android\n"
         "\n"
         "usage:\n"
         "  cellar --list-modules         list registered Win32 modules\n"
+        "  cellar --perf                 show perf counters / tracing / options\n"
+        "  cellar --platform             show OS + perf-hint info\n"
+        "  cellar --audio [out.wav]      render a tone through the audio backend\n"
+        "  cellar --papi=1 program.exe   enable page population for the load\n"
         "  cellar program.exe [args...]  load and inspect a Windows executable\n"
         "\n"
-        "Execution of the loaded binary is not yet implemented; this build\n"
-        "parses and reports the PE structure.\n",
+        "Execution of loaded binaries is not yet implemented; this build parses\n"
+        "and reports the PE structure, exercises audio, and collects perf data.\n"
+        "\n"
+        "Performance options:\n"
+        "  --papi=0|1   populate pages in new mappings (faster steady-state)\n"
+        "  CELLAR_WAV_OUT=path  set the audio WAV sink output file\n",
         CELLAR_VERSION_STRING);
 }
 
 int main(int argc, char **argv)
 {
     int i;
+    int want_perf = 0;
 
     cellar_win32_init();
 
@@ -131,10 +247,49 @@ int main(int argc, char **argv)
         return 0;
     }
 
+    if (strcmp(argv[1], "--platform") == 0) {
+        dump_platform();
+        return 0;
+    }
+
+    if (strcmp(argv[1], "--audio") == 0) {
+        const char *out = argc > 2 ? argv[2] : "cellar-out.wav";
+        return dump_audio_sink(out);
+    }
+
+    /* Parse options and flags (--papi=1, --perf) before the program list. */
     for (i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--perf") == 0) {
+            want_perf = 1;
+            continue;
+        }
+        if (strncmp(argv[i], "--papi=", 7) == 0) {
+            cellar_perf_options_t opt = *cellar_perf_options();
+            opt.papi = atoi(argv[i] + 7) ? 1 : 0;
+            cellar_perf_set_options(&opt);
+            continue;
+        }
+        break; /* first non-option argument starts the program list */
+    }
+
+    if (i >= argc) {
+        /* No program given. */
+        if (want_perf) {
+            dump_perf();
+            return 0;
+        }
+        usage(stderr);
+        return 1;
+    }
+
+    for (; i < argc; i++) {
         if (dump_image(argv[i]) != 0)
             return 1;
     }
+
+    /* Report cumulative counters when --perf was requested. */
+    if (want_perf)
+        dump_perf();
 
     return 0;
 }

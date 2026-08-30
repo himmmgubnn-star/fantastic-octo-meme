@@ -16,6 +16,8 @@
 #include "cellar/cellar.h"
 #include "cellar/loader.h"
 #include "cellar/pe.h"
+#include "cellar/perf.h"
+#include "cellar/platform.h"
 #include "cellar/win32.h"
 
 /* Declared in pe.c */
@@ -58,6 +60,45 @@ static cellar_status_t read_file_all(const char *path, uint8_t **out,
     return CELLAR_OK;
 }
 
+/*
+ * Load a file's bytes. For small files this reads normally; for files above
+ * the performance tunable's threshold it memory-maps the file (zero-copy), so
+ * large game executables load without a full buffer copy. Returns an owned
+ * buffer either way: mmap results are copied out after parsing in
+ * cellar_image_load_buffer, so the map can be released immediately.
+ */
+static cellar_status_t read_file_perf(const char *path, uint8_t **out,
+                                      size_t *out_len)
+{
+    const cellar_perf_options_t *opt = cellar_perf_options();
+    cellar_mapped_file_t mf;
+    cellar_status_t st;
+    uint8_t *buf;
+
+    /* If a map is cheap and enabled, use it, then snapshot the bytes. */
+    if (cellar_map_file(path, &mf) == CELLAR_OK && mf.size > 0) {
+        if ((int)mf.size >= opt->mmap_threshold) {
+            size_t msize = mf.size;
+            buf = malloc(msize);
+            if (!buf) {
+                cellar_unmap_file(&mf);
+                return CELLAR_ERR_OUT_OF_MEMORY;
+            }
+            memcpy(buf, mf.data, msize);
+            cellar_unmap_file(&mf);
+            cellar_perf_count_mmap_read();
+            *out = buf;
+            *out_len = msize;
+            st = CELLAR_OK;
+            return st;
+        }
+        cellar_unmap_file(&mf);
+    }
+
+    /* Fall back to a plain read (map failed or file is small). */
+    return read_file_all(path, out, out_len);
+}
+
 /* ---- Section mapping ----------------------------------------------------- */
 
 static cellar_status_t map_sections(cellar_image_t *img)
@@ -89,6 +130,11 @@ static cellar_status_t map_sections(cellar_image_t *img)
                img->raw + s->raw_offset, s->raw_size);
         s->mapped = img->mapped + s->virtual_address;
     }
+
+    /* Game-performance optimization: with --papi=1, touch every page of the
+     * mapped image now so later execution doesn't stall on page faults. */
+    if (cellar_perf_options()->papi)
+        cellar_prefault(img->mapped, img->mapped_size);
 
     img->sections_mapped = true;
     return CELLAR_OK;
@@ -206,6 +252,7 @@ static cellar_status_t parse_imports(cellar_image_t *img)
 
     img->import_count = n;
     img->imports_parsed = true;
+    cellar_perf_count_imports(n);
     return CELLAR_OK;
 }
 
@@ -356,6 +403,9 @@ cellar_status_t cellar_image_load_buffer(const void *data, size_t len,
     }
 
     *out = img;
+    cellar_perf_count_images();
+    if (img.sections_mapped)
+        cellar_perf_count_map(img.mapped_size);
     return CELLAR_OK;
 }
 
@@ -367,7 +417,7 @@ cellar_status_t cellar_image_load_file(const char *path,
     uint8_t *buf = NULL;
     size_t len = 0;
 
-    st = read_file_all(path, &buf, &len);
+    st = read_file_perf(path, &buf, &len);
     if (st != CELLAR_OK)
         return st;
 

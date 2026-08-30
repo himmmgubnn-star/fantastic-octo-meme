@@ -6,6 +6,9 @@
 # Generated test executable
 /samples/hello.exe
 
+# Generated audio output
+*.wav
+
 # Editors / OS
 .DS_Store
 *.swp

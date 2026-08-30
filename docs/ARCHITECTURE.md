@@ -104,11 +104,57 @@ Linux syscalls and libc (file I/O, the console, timers, the heap, …).
 
 `src/win32/init.c` registers every module via `cellar_win32_init()`.
 
+## The portability layer — `src/port/posix.c`
+
+`include/cellar/platform.h` is the seam for everything OS-specific: clocks and
+sleep, pid/tid, `FILETIME` system time, and zero-copy file mapping. A single
+POSIX implementation serves both **Linux and Android** (Android's Bionic libc
+exposes the same syscalls). Porting to a new OS means adding one more
+implementation file — nothing else changes. This is what makes "Windows EXEs on
+all Linux environments, including Android" concrete.
+
+## The audio subsystem — `src/audio/`
+
+Games output audio through `WINMM`/`DirectSound`/`XAudio2`. Cellar funnels
+those into a small set of **backends** so the Win32 layer never touches
+hardware:
+
+```
+winmm.dll (waveOutWrite)  ->  cellar_audio_device_t  ->  backend
+                                                      |-> WAV file sink (default)
+                                                      |-> ALSA (make ALSA=1)
+                                                      `-> null
+```
+
+- `src/audio/audio.c` — backend dispatch + the dependency-free **WAV sink**
+  (writes real RIFF/WAVE files, used by tests and `cellar --audio`).
+- `src/audio/alsa.c` — optional **ALSA** backend for real low-latency output
+  on desktop Linux (`make ALSA=1`, `-lasound`).
+- `src/win32/mod_winmm.c` — the `WINMM.dll` module games import: `waveOutOpen`,
+  `waveOutWrite`, `waveOutGetPosition`, `PlaySoundA`, and `timeGetTime`
+  (timing), all routed through the backend.
+
+## The performance kit — `src/perf/perf.c`
+
+Optimization for game-like Windows workloads:
+
+- **Counters** (`images_loaded`, `imports_resolved`, `map_bytes`,
+  `mmap_reads`, `audio_bytes`, …) incremented by the loader and Win32 layer.
+- **Tunables** (`cellar_perf_options_t`): page pre-faulting (`--papi=1`),
+  the mmap threshold for zero-copy file loads, and large pages.
+- **Tracing** — a bounded ring buffer (`cellar_perf_trace`) for timeline dumps.
+- **Helpers** — a high-performance scheduling hint and page pre-faulting.
+
+Loading already benefits: large files are memory-mapped (zero-copy) via
+`cellar_map_file`, and `--papi=1` pre-faults every page of the mapped image so
+later execution doesn't stall on page-fault latency.
+
 ## The CLI — `src/cli.c`
 
 A thin driver: `cellar_win32_init()`, then either dump the module registry or
 load and report one or more executables. It is intentionally small — it is a
-demo and debugging surface, not the product.
+demo and debugging surface, not the product. It also exposes the new
+subsystems as subcommands: `--perf`, `--platform`, `--audio`, and `--papi=1`.
 
 ## Conventions
 

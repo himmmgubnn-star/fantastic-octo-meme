@@ -7,10 +7,12 @@
 #   make sample     generate a synthetic PE (samples/hello.exe)
 #   make clean      remove build artifacts
 #   make libcellar  build only the static library archive
+#   make ALSA=1     also build the optional ALSA audio backend (needs libasound)
 #
 # Optional knobs:
 #   CC      the C compiler            (default: cc)
 #   CFLAGS  extra compiler flags      (default: see below)
+#   ALSA=1  enable the real ALSA audio backend
 #   CELLAR_LOG_LEVEL  compile-time logging threshold (0..4, default 2)
 
 CC      ?= cc
@@ -35,17 +37,27 @@ LIB_SRCS = \
 	src/loader/loader.c \
 	src/win32/api.c \
 	src/win32/mod_kernel32.c \
-	src/win32/init.c
+	src/win32/mod_winmm.c \
+	src/win32/init.c \
+	src/port/posix.c \
+	src/audio/audio.c \
+	src/perf/perf.c
+
+# Optional ALSA backend for real audio on desktop Linux:
+#   make ALSA=1            (requires libasound2-dev)
+LIB_SRCS += $(if $(ALSA),src/audio/alsa.c)
+CFLAGS   += $(if $(ALSA),-DCELLAR_AUDIO_ALSA)
+LDLIBS   := $(if $(ALSA),-lasound)
 
 LIB_OBJS = $(patsubst src/%.c,$(BUILD)/obj/%.o,$(LIB_SRCS))
-TEST_SRCS = tests/test_loader.c
+TEST_SRCS = tests/test_loader.c tests/test_audio.c tests/test_perf.c
 TEST_OBJS = $(patsubst tests/%.c,$(BUILD)/obj/%.o,$(TEST_SRCS))
+TEST_BINS = test_loader test_audio test_perf
 GEN       = $(BUILD)/gen_sample_pe
 SAMPLE    = samples/hello.exe
 
 LIB  = $(BUILD)/libcellar.a
 CLI  = $(BUILD)/cellar
-TEST = $(BUILD)/test_loader
 
 all: $(CLI)
 
@@ -53,10 +65,14 @@ $(LIB): $(LIB_OBJS)
 	$(AR) rcs $@ $(LIB_OBJS)
 
 $(CLI): src/cli.c $(LIB)
-	$(CC) $(CFLAGS) $< $(LIB) -o $@
+	$(CC) $(CFLAGS) $< $(LIB) $(LDLIBS) -o $@
 
-$(TEST): $(TEST_OBJS) $(LIB)
-	$(CC) $(CFLAGS) $(TEST_OBJS) $(LIB) -o $@
+$(BUILD)/test_loader: tests/test_loader.c $(LIB)
+	$(CC) $(CFLAGS) tests/test_loader.c $(LIB) $(LDLIBS) -o $@
+$(BUILD)/test_audio: tests/test_audio.c $(LIB)
+	$(CC) $(CFLAGS) tests/test_audio.c $(LIB) $(LDLIBS) -o $@
+$(BUILD)/test_perf: tests/test_perf.c $(LIB)
+	$(CC) $(CFLAGS) tests/test_perf.c $(LIB) $(LDLIBS) -o $@
 
 $(GEN): tools/gen_sample_pe.c
 	@mkdir -p $(dir $@)
@@ -78,8 +94,10 @@ $(BUILD)/obj/%.o: tests/%.c
 
 libcellar: $(LIB)
 
-test: $(TEST)
-	./$(TEST)
+TESTS := $(addprefix $(BUILD)/,$(TEST_BINS))
+
+test: $(TESTS)
+	@for t in $(TESTS); do ./$$t || exit 1; done
 
 check: test
 
