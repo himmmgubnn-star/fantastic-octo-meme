@@ -87,6 +87,28 @@ several Windows toolchains run unmodified.
 - ✅ **CMake build** with an Android NDK toolchain recipe + CLI subcommands
   (`--perf`, `--platform`, `--audio`, `--papi=1`) + unit tests for all three
 
+## Milestone 4.7 — Advanced compatibility (current)
+
+> **Goal:** diagnose, remember, and optimize real Windows software.
+
+- ✅ **Application Compatibility Analyzer** — `cellar analyze game.exe`:
+  per-subsystem scoring vs the API database, missing-API diagnostics, issue
+  detection, config recommendations
+- ✅ **Per-application compatibility profiles** — persisted per-app config
+  (version mode, backends, DLL overrides, sync, shader cache) under prefixes/
+- ✅ **Windows-version behavior modes** — Win 7 / 8.1 / 10 / 11 behavioral
+  flag sets (DPI, UTF-8, touch, threadpool, ARM translation)
+- ✅ **High-resolution timer** — calibrated ns clock, deadline sleep/spin,
+  frame-time diagnostics (FPS, 1% low, CPU/GPU/translation waits)
+- ✅ **Lightweight synchronization** — futex mutex/event/semaphore/spinlock
+- ✅ **Shared-memory ring** — lock-free zero-copy SPSC buffer
+- ✅ **Shader pipeline cache** — persistent, identity-keyed, invalidating
+- ✅ **Dynamic runtime tracing** — `--trace=...`, zero overhead when off
+- ✅ **Crash-recovery diagnostics** — structured EXCEPTION capture
+- ✅ **Plugin architecture + backend hot-selection** — Vulkan→OpenGL→Software
+- ✅ **Regression + fuzz testing** — 5 unit suites + deterministic fuzzer
+- 🔶 **Dependency management** (installing legitimate runtime components)
+
 ## Milestone 5 — Robustness & ecosystem
 
 - ⬜ Loader hardening (more fuzzing, corpus testing)

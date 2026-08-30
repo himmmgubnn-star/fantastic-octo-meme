@@ -49,6 +49,14 @@ void cellar_win32_register_module(const cellar_module_t *mod);
  * NULL when unknown. */
 const cellar_module_t *cellar_win32_find_module(const char *name);
 
+/* Number of registered modules and the i-th module (for iteration). */
+size_t cellar_win32_module_count(void);
+const cellar_module_t *cellar_win32_module_at(size_t i);
+
+/* Non-logging check: is `function` exported by `module`? (Used by the
+ * compatibility analyzer so coverage scoring doesn't spam the log.) */
+bool cellar_win32_export_exists(const char *module, const char *function);
+
 /* Look up an export within a module by function name. Returns NULL when the
  * module or the function is unknown. */
 void *cellar_win32_lookup(const char *module, const char *function);

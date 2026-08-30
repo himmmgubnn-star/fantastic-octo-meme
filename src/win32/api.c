@@ -70,6 +70,30 @@ const cellar_module_t *cellar_win32_find_module(const char *name)
     return NULL;
 }
 
+size_t cellar_win32_module_count(void)
+{
+    return g_module_count;
+}
+
+const cellar_module_t *cellar_win32_module_at(size_t i)
+{
+    if (i >= g_module_count)
+        return NULL;
+    return g_modules[i];
+}
+
+bool cellar_win32_export_exists(const char *module, const char *function)
+{
+    const cellar_module_t *m = cellar_win32_find_module(module);
+    size_t i;
+    if (!m || !function)
+        return false;
+    for (i = 0; i < m->count; i++)
+        if (strcmp(m->exports[i].name, function) == 0)
+            return true;
+    return false;
+}
+
 void *cellar_win32_lookup(const char *module, const char *function)
 {
     const cellar_module_t *m = cellar_win32_find_module(module);

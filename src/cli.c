@@ -19,10 +19,14 @@
 
 #include "cellar/cellar.h"
 #include "cellar/audio.h"
+#include "cellar/compat.h"
+#include "cellar/crash.h"
 #include "cellar/loader.h"
 #include "cellar/pe.h"
 #include "cellar/perf.h"
+#include "cellar/plugin.h"
 #include "cellar/platform.h"
+#include "cellar/trace.h"
 #include "cellar/win32.h"
 
 static const char *machine_name(uint16_t m)
@@ -187,6 +191,49 @@ static int dump_image(const char *path)
     return 0;
 }
 
+static int cmd_analyze(const char *path)
+{
+    cellar_status_t st;
+    cellar_image_t img;
+    cellar_analysis_t analysis;
+    cellar_app_profile_t prof;
+    const char *base;
+
+    st = cellar_image_load_file(path, CELLAR_LOAD_DEFAULT, &img);
+    if (st != CELLAR_OK) {
+        fprintf(stderr, "cellar: cannot load '%s': %s\n",
+                path, cellar_status_string(st));
+        return 1;
+    }
+
+    base = strrchr(path, '/');
+    base = base ? base + 1 : path;
+
+    st = cellar_compat_analyze(&img, base, &analysis);
+    if (st != CELLAR_OK) {
+        fprintf(stderr, "cellar: analysis failed: %s\n",
+                cellar_status_string(st));
+        cellar_image_unload(&img);
+        return 1;
+    }
+
+    cellar_compat_report(&analysis);
+
+    /* Remember a per-application profile with the recommended config. */
+    memset(&prof, 0, sizeof prof);
+    snprintf(prof.app_name, sizeof prof.app_name, "%s", base);
+    prof.version_mode = CELLAR_WIN_10;
+    snprintf(prof.gfx_backend, sizeof prof.gfx_backend, "%s",
+             analysis.gfx_recommendation);
+    snprintf(prof.audio_backend, sizeof prof.audio_backend, "%s",
+             analysis.audio_recommendation);
+    prof.shader_cache_enabled = analysis.shader_cache_enabled;
+    cellar_profile_save(cellar_prefix_dir(), &prof);
+
+    cellar_image_unload(&img);
+    return 0;
+}
+
 static void dump_platform(void)
 {
     printf("== platform ==\n");
@@ -209,19 +256,24 @@ static void usage(FILE *out)
         "cellar %s — a Windows compatibility layer for Linux & Android\n"
         "\n"
         "usage:\n"
+        "  cellar analyze game.exe       application compatibility analysis\n"
         "  cellar --list-modules         list registered Win32 modules\n"
         "  cellar --perf                 show perf counters / tracing / options\n"
         "  cellar --platform             show OS + perf-hint info\n"
         "  cellar --audio [out.wav]      render a tone through the audio backend\n"
+        "  cellar --trace=api,dll prog   enable dynamic tracing categories\n"
         "  cellar --papi=1 program.exe   enable page population for the load\n"
         "  cellar program.exe [args...]  load and inspect a Windows executable\n"
         "\n"
         "Execution of loaded binaries is not yet implemented; this build parses\n"
         "and reports the PE structure, exercises audio, and collects perf data.\n"
         "\n"
-        "Performance options:\n"
-        "  --papi=0|1   populate pages in new mappings (faster steady-state)\n"
-        "  CELLAR_WAV_OUT=path  set the audio WAV sink output file\n",
+        "Options:\n"
+        "  --papi=0|1        populate pages in new mappings (faster steady-state)\n"
+        "  --trace=list      tracing categories: graphics,filesystem,threading,\n"
+        "                    dll,api,audio,timer,compat,all (also via $CELLAR_TRACE)\n"
+        "  CELLAR_WAV_OUT=path  set the audio WAV sink output file\n"
+        "  CELLAR_PREFIX=dir    set the compatibility-prefix directory\n",
         CELLAR_VERSION_STRING);
 }
 
@@ -231,6 +283,8 @@ int main(int argc, char **argv)
     int want_perf = 0;
 
     cellar_win32_init();
+    cellar_trace_init_from_env();
+    cellar_backend_init();
 
     if (argc < 2) {
         usage(stderr);
@@ -240,6 +294,14 @@ int main(int argc, char **argv)
     if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
         usage(stdout);
         return 0;
+    }
+
+    if (strcmp(argv[1], "analyze") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "cellar: analyze needs a path to a .exe\n");
+            return 1;
+        }
+        return cmd_analyze(argv[2]);
     }
 
     if (strcmp(argv[1], "--list-modules") == 0) {
@@ -267,6 +329,10 @@ int main(int argc, char **argv)
             cellar_perf_options_t opt = *cellar_perf_options();
             opt.papi = atoi(argv[i] + 7) ? 1 : 0;
             cellar_perf_set_options(&opt);
+            continue;
+        }
+        if (strncmp(argv[i], "--trace=", 8) == 0) {
+            cellar_trace_enable(cellar_trace_parse(argv[i] + 8));
             continue;
         }
         break; /* first non-option argument starts the program list */

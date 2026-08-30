@@ -15,6 +15,7 @@
 
 #include "cellar/cellar.h"
 #include "cellar/audio.h"
+#include "cellar/crash.h"
 #include "cellar/perf.h"
 #include "cellar/platform.h"
 #include "cellar/win32.h"
@@ -224,6 +225,7 @@ static UINT WINAPI cellar_waveOutWrite(HWAVEOUT hwo, WAVEHDR *pwh, UINT cbwh)
 {
     cellar_mm_device_t *d = dev_from_handle(hwo);
     (void)cbwh;
+    cellar_crash_set_current_api("audio", "winmm!waveOutWrite");
     if (!d || !d->open)
         return MMSYSERR_INVALHANDLE;
     if (!pwh || !pwh->lpData || pwh->dwBufferLength == 0)

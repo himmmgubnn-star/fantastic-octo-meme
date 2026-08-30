@@ -18,6 +18,7 @@
 #include "cellar/pe.h"
 #include "cellar/perf.h"
 #include "cellar/platform.h"
+#include "cellar/trace.h"
 #include "cellar/win32.h"
 
 /* Declared in pe.c */
@@ -244,6 +245,10 @@ static cellar_status_t parse_imports(cellar_image_t *img)
                 img->imports[n].ordinal = ord;
                 img->imports[n].resolved =
                     cellar_win32_resolve(mod, fn, ord);
+                CELLAR_TRACE(CELLAR_TRACE_DLL,
+                             "import %s!%s -> %s",
+                             mod, fn ? fn : "#(ordinal)",
+                             img->imports[n].resolved ? "ok" : "UNRESOLVED");
                 n++;
             }
         }

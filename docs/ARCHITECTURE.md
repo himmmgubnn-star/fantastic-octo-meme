@@ -149,12 +149,50 @@ Loading already benefits: large files are memory-mapped (zero-copy) via
 `cellar_map_file`, and `--papi=1` pre-faults every page of the mapped image so
 later execution doesn't stall on page-fault latency.
 
+## The Application Compatibility Analyzer — `src/compat/`
+
+The flagship. `cellar_compat_analyze()` takes a loaded image and:
+
+1. **Classifies each import** into a subsystem (graphics, audio, input,
+   networking, filesystem, threading, system) via DLL-prefix and
+   function-name heuristics.
+2. **Scores each subsystem** against Cellar's API database
+   (`cellar_win32_export_exists`), producing a percentage.
+3. **Records unresolvable imports** as structured missing-API diagnostics
+   (`module`, `function`, `called by`, recommendation).
+4. **Detects technologies** (Direct3D 11/12, OpenGL, Vulkan, XInput,
+   Winsock, WINMM, WASAPI, …) and **issues** (D3D feature levels, high-res
+   timer usage, advanced sync usage).
+5. **Recommends a configuration** and saves a per-application profile
+   (`src/compat/profile.c`), which also implements Windows-version behavior
+   modes (7/8.1/10/11) as behavioral flag sets, and the prefix/profile store.
+
+## Timing, sync, shared memory — `src/timer`, `src/sync`, `src/shmem`
+
+- `timer.c` — calibrated monotonic ns clock (`clock_gettime`), deadline
+  `nanosleep` and busy-spin, and a frame-time tracker (FPS, 1% low, waits).
+- `sync.c` — futex-based mutex/event/semaphore/spinlock. The uncontended
+  fast path is a single atomic; `futex_wait` is only entered on contention.
+- `shmem.c` — a lock-free single-producer/single-consumer ring for zero-copy
+  transfer between components.
+
+## Tracing, shader cache, plugins, crash — cross-cutting
+
+- `trace.c` — dynamic category tracing; `CELLAR_TRACE(cat, ...)` is a guarded
+  branch that costs nothing when disabled.
+- `gfx/shadercache.c` — persistent shader blob cache keyed by shader hash +
+  GPU + driver + API version, with invalidation on identity change.
+- `plugin.c` — backend registry with preference-ordered hot-selection
+  (Vulkan → OpenGL → Software) and `.so` plugin loading via dlopen.
+- `crash.c` — a signal handler that captures module/thread/API-call/DLLs
+  into a structured EXCEPTION report.
+
 ## The CLI — `src/cli.c`
 
 A thin driver: `cellar_win32_init()`, then either dump the module registry or
 load and report one or more executables. It is intentionally small — it is a
-demo and debugging surface, not the product. It also exposes the new
-subsystems as subcommands: `--perf`, `--platform`, `--audio`, and `--papi=1`.
+demo and debugging surface, not the product. Subcommands: `analyze`, `--perf`,
+`--platform`, `--audio`, `--papi=1`, and `--trace=...`.
 
 ## Conventions
 

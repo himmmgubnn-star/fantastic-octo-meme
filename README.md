@@ -33,8 +33,9 @@ Requires a C11 compiler (GCC or Clang), GNU Make (or CMake), and `ar`.
 
 ```sh
 make            # build the `cellar` CLI + libcellar.a
-make test       # build and run the unit tests (loader + audio + perf)
+make test       # build and run the unit tests (loader/audio/perf/compat/kit)
 make sample     # generate a synthetic test PE -> samples/hello.exe
+make fuzz       # run a deterministic loader fuzz campaign
 make ALSA=1     # also build the real ALSA audio backend (needs libasound2-dev)
 make clean      # remove build artifacts
 ```
@@ -64,7 +65,7 @@ $ make test
 test_loader: all tests passed
 
 $ make sample
-wrote samples/hello.exe (1792 bytes)
+wrote samples/hello.exe (4608 bytes)
 
 $ ./build/cellar samples/hello.exe
 == samples/hello.exe ==
@@ -82,14 +83,48 @@ $ ./build/cellar samples/hello.exe
 `make sample` synthesizes a real, loadable PE without MinGW — handy for exercising the loader on a machine with no Windows toolchain. You can also point `cellar` at any genuine `.exe`.
 
 ```sh
+cellar analyze program.exe       # Application Compatibility Analysis (flagship)
 cellar program.exe               # load + report a Windows executable
 cellar --list-modules            # show registered Win32 modules & exports
 cellar --platform                # OS / perf-hint info
 cellar --perf program.exe        # load, then dump perf counters + tracing
 cellar --papi=1 program.exe      # pre-fault pages (faster steady-state)
+cellar --trace=dll,api program   # dynamic tracing (graphics,filesystem,...)
 cellar --audio out.wav           # render a tone through the audio backend
 cellar --help
 ```
+
+## Application Compatibility Analyzer (flagship)
+
+`cellar analyze game.exe` inspects an executable before launch and produces a
+boxed report: architecture, detected graphics/audio/input/network tech,
+per-category compatibility scores against Cellar's API database, concrete
+missing-API diagnostics, potential issues, and a recommended configuration.
+It also remembers a per-application profile so working configs are reused.
+
+```sh
+$ cellar analyze samples/hello.exe
+============================================
+   COMPATIBILITY ANALYSIS — hello.exe
+============================================
+Architecture:        x86
+PE format:           Valid
+Graphics:            Direct3D 11
+Audio:               WINMM
+Input:               XInput
+Networking:          Winsock
+
+Windows APIs
+Graphics         [                    ]   0%  (0/1)
+Audio            [####################] 100%  (1/1)
+...
+Recommended configuration
+-------------------------
+Graphics: Vulkan
+Shader cache: ENABLED
+```
+
+The analyzer drives several advanced features described below.
 
 ## Audio
 
@@ -104,6 +139,39 @@ Cellar plays Windows audio through a pluggable backend:
 The `WINMM.dll` module (`waveOut*`, `PlaySoundA`, `timeGetTime`) routes through
 this backend, so games use familiar Win32 multimedia APIs regardless of the
 underlying OS audio system.
+
+## Advanced compatibility features
+
+Cellar bundles a set of advanced, realistic features for running real Windows
+software — including games:
+
+- **Per-application compatibility profiles** — remember a working configuration
+  (Windows-version mode, graphics/audio backend, DLL overrides, sync mode,
+  shader cache) per app under a prefix directory (`~/.cellar/prefixes/`).
+- **Windows-version behavior profiles** — Win 7 / 8.1 / 10 / 11 modes that
+  reproduce behavioral differences (DPI awareness, UTF-8 code page, touch
+  input, threadpool model, ARM translation), not just the reported version.
+- **Missing-API diagnostics** — the analyzer reports each unresolvable import
+  as `module`, `missing API`, `called by`, and a recommendation.
+- **High-resolution timer subsystem** — calibrated monotonic ns clock,
+  deadline sleep and spin primitives, plus a **frame-time tracker** (FPS,
+  1% low, average, max, and CPU/GPU/translation waits).
+- **Lightweight synchronization** — futex-based mutex/event/semaphore/spinlock;
+  the uncontended path is a single atomic operation with no syscall.
+- **Shared-memory ring buffer** — lock-free single-producer/single-consumer
+  zero-copy transfer between compatibility components.
+- **Shader pipeline cache** — persistent, keyed by shader hash + GPU + driver +
+  API version, with invalidation rules on identity change.
+- **Dynamic runtime tracing** — `--trace=graphics,api,dll,...` (also
+  `$CELLAR_TRACE`); zero overhead when disabled.
+- **Crash-recovery diagnostics** — a signal handler that captures module,
+  thread, the Windows API call in flight, syscall context, and loaded DLLs
+  into a structured EXCEPTION report.
+- **Plugin architecture & backend hot-selection** — backends registered by
+  preference (Vulkan → OpenGL → Software; ALSA → PipeWire → WAV); plugins
+  loadable as `.so` files.
+- **Regression + fuzz testing** — `make test` verifies API behavior against
+  expected results; `make fuzz` runs a deterministic PE-loader fuzz campaign.
 
 ## Performance & gaming optimization
 
@@ -129,7 +197,16 @@ Cellar ships a performance kit aimed at game-like Windows workloads:
 - **Portability layer** — one POSIX implementation serves Linux and Android (clocks, sleep, mmap reads, pid/tid).
 - **Audio subsystem** — backend dispatch with a testable WAV sink and optional ALSA.
 - **Performance kit** — counters, tunables, tracing, pre-faulting, zero-copy mmap loads.
-- **Unit tests** — loader + audio + perf suites driven by a synthetic PE and a real WAV output; all run clean under AddressSanitizer/UBsan.
+- **Application Compatibility Analyzer** — per-subsystem scoring, missing-API diagnostics, issue detection, and config recommendations.
+- **Compatibility profiles** — per-app remembered configs and Windows-version behavior modes (7/8.1/10/11).
+- **High-res timing** — calibrated ns clock, deadline sleep/spin, and frame-time diagnostics (FPS, 1% low, waits).
+- **Lightweight sync** — futex-based mutex/event/semaphore/spinlock (no syscall when uncontended).
+- **Shared-memory ring** — lock-free zero-copy SPSC buffer.
+- **Shader cache** — persistent, identity-keyed with invalidation.
+- **Dynamic tracing** — `--trace=...` categories, zero overhead when off.
+- **Crash diagnostics** — structured EXCEPTION capture on fatal signals.
+- **Plugins & backend selection** — Vulkan→OpenGL→Software / ALSA→PipeWire→WAV hot-selection, `.so` plugin loading.
+- **Testing** — 5 unit suites plus a deterministic loader fuzz harness (`make fuzz`), all clean under ASan/UBSan.
 
 ## Layout
 
@@ -142,6 +219,14 @@ include/cellar/          public headers
   platform.h             OS portability seam (Linux + Android)
   audio.h                audio backend API
   perf.h                 performance counters/tunables/tracing
+  compat.h               compatibility analysis + profiles + version modes
+  timer.h                high-res timer + frame diagnostics
+  sync.h                 lightweight futex synchronization primitives
+  shmem.h                zero-copy shared-memory ring
+  trace.h                dynamic category-based tracing
+  shadercache.h          persistent shader pipeline cache
+  plugin.h               plugin architecture + backend hot-selection
+  crash.h                crash-recovery diagnostics
 src/
   loader/
     cellar_util.c        status strings, logging, endian reads, hashing
@@ -159,13 +244,33 @@ src/
     alsa.c               optional ALSA backend (make ALSA=1)
   perf/
     perf.c               performance kit
+  compat/
+    compat.c             the Application Compatibility Analyzer
+    profile.c            per-app profiles + Windows-version behavior modes
+  timer/
+    timer.c              high-res clock, sleep/spin, frame-time stats
+  sync/
+    sync.c               futex mutex/event/semaphore/spinlock
+  shmem/
+    shmem.c              zero-copy SPSC ring buffer
+  trace/
+    trace.c              dynamic tracing
+  gfx/
+    shadercache.c        persistent shader cache
+  plugin/
+    plugin.c             backend registry + plugin loading
+  crash/
+    crash.c              crash diagnostics + signal handler
   cli.c                  command-line driver
 tests/
   test_loader.c          loader unit tests (synthetic-PE driven)
   test_audio.c           audio backend / WAV sink tests
   test_perf.c            perf counters / ring / tunables tests
+  test_compat.c          analyzer + version profiles + app profiles + crash
+  test_kit.c             timer, sync, shmem, trace, shadercache tests
 tools/
   gen_sample_pe.c        writes a minimal valid PE for testing
+  fuzz_loader.c          deterministic PE-loader fuzz harness
 docs/
   ARCHITECTURE.md        how the pieces fit together
   ROADMAP.md             the path to actually running Windows programs

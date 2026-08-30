@@ -15,6 +15,7 @@
 #include "cellar/cellar.h"
 #include "cellar/audio.h"
 #include "cellar/perf.h"
+#include "cellar/trace.h"
 
 /* ---- WAV sink implementation --------------------------------------------- */
 
@@ -167,8 +168,11 @@ cellar_status_t cellar_audio_write(cellar_audio_device_t *dev,
     if (!dev || !dev->backend || !dev->backend->write)
         return CELLAR_ERR_INVALID_ARGUMENT;
     st = dev->backend->write(dev, data, bytes);
-    if (st == CELLAR_OK)
+    if (st == CELLAR_OK) {
         cellar_perf_trace("audio.write", bytes);
+        CELLAR_TRACE(CELLAR_TRACE_AUDIO, "write %u bytes -> %s",
+                     bytes, dev->backend->name);
+    }
     return st;
 }
 

@@ -22,6 +22,15 @@ set(CELLAR_LIB_SOURCES
   src/port/posix.c
   src/audio/audio.c
   src/perf/perf.c
+  src/compat/compat.c
+  src/compat/profile.c
+  src/timer/timer.c
+  src/sync/sync.c
+  src/shmem/shmem.c
+  src/trace/trace.c
+  src/gfx/shadercache.c
+  src/plugin/plugin.c
+  src/crash/crash.c
 )
 if(CELLAR_AUDIO_ALSA)
   list(APPEND CELLAR_LIB_SOURCES src/audio/alsa.c)
@@ -35,6 +44,14 @@ set(CELLAR_LIB_HEADERS
   include/cellar/platform.h
   include/cellar/audio.h
   include/cellar/perf.h
+  include/cellar/compat.h
+  include/cellar/timer.h
+  include/cellar/sync.h
+  include/cellar/shmem.h
+  include/cellar/trace.h
+  include/cellar/shadercache.h
+  include/cellar/plugin.h
+  include/cellar/crash.h
 )
 
 add_library(cellar STATIC ${CELLAR_LIB_SOURCES} ${CELLAR_LIB_HEADERS})
