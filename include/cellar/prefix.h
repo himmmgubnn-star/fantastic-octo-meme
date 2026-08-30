@@ -27,11 +27,40 @@ typedef struct cellar_prefix_info {
     cellar_version_mode_t version_mode;
     char gfx[32];
     char audio[32];
+    char arch[8];       /* "win32" / "win64" (fixed at creation) */
+    char runner[32];    /* per-prefix Wine/Proton runner         */
     int  exists;
 } cellar_prefix_info_t;
 
-/* Create a bottle under `root`/`name` (drive_c tree + prefix.conf). */
+/* Create a bottle under `root`/`name` (drive_c tree + prefix.conf). The
+ * default architecture is win64. */
 cellar_status_t cellar_prefix_create(const char *root, const char *name);
+
+/* Create with an explicit architecture: "win32" or "win64". Architecture is
+ * fixed at creation (converting later is not supported). */
+cellar_status_t cellar_prefix_create_arch(const char *root, const char *name,
+                                          const char *arch);
+
+/* Clone a bottle into a new name (files + config). */
+cellar_status_t cellar_prefix_clone(const char *root, const char *src,
+                                    const char *dst);
+
+/* Export = backup; import = restore. Semantic aliases so the front end can
+ * speak "export a container" / "import a container". */
+cellar_status_t cellar_prefix_export(const char *root, const char *name,
+                                     const char *archive_path);
+cellar_status_t cellar_prefix_import(const char *root, const char *name,
+                                     const char *archive_path);
+
+/* Generic key=value settings read/write on the prefix.conf file. These expose
+ * the "settings worth exposing" surface (Windows version, runner, graphics
+ * backend, resolution, virtual desktop, Box64 preset, CPU/frame limits,
+ * ESync/FSync, DLL overrides) at container scope. */
+cellar_status_t cellar_prefix_get_setting(const char *root, const char *name,
+                                          const char *key,
+                                          char *out, size_t cap);
+cellar_status_t cellar_prefix_set_setting(const char *root, const char *name,
+                                          const char *key, const char *value);
 
 cellar_status_t cellar_prefix_delete(const char *root, const char *name);
 

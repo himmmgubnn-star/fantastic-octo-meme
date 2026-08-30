@@ -9,11 +9,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
 #include "cellar/cellar.h"
 #include "cellar/compat.h"
+#include "cellar/platform.h"
 #include "cellar/prefix.h"
 #include "cellar/shell.h"
 
@@ -30,8 +32,12 @@ static int valid_name(const char *name)
     return 1;
 }
 
-static cellar_status_t write_conf(const char *bottle, cellar_version_mode_t mode,
-                                  const char *gfx, const char *audio)
+static void read_conf(const char *bottle, cellar_prefix_info_t *out);
+
+static cellar_status_t write_conf_full(const char *bottle,
+                                       cellar_version_mode_t mode,
+                                       const char *gfx, const char *audio,
+                                       const char *arch, const char *runner)
 {
     char path[640];
     FILE *f;
@@ -42,8 +48,18 @@ static cellar_status_t write_conf(const char *bottle, cellar_version_mode_t mode
     fprintf(f, "version_mode=%d\n", (int)mode);
     fprintf(f, "gfx=%s\n", gfx ? gfx : "Vulkan");
     fprintf(f, "audio=%s\n", audio ? audio : "ALSA");
+    fprintf(f, "arch=%s\n", arch ? arch : "win64");
+    fprintf(f, "runner=%s\n", runner ? runner : "stable");
     fclose(f);
     return CELLAR_OK;
+}
+
+static cellar_status_t write_conf(const char *bottle, cellar_version_mode_t mode,
+                                  const char *gfx, const char *audio)
+{
+    cellar_prefix_info_t info;
+    read_conf(bottle, &info);
+    return write_conf_full(bottle, mode, gfx, audio, info.arch, info.runner);
 }
 
 static void read_conf(const char *bottle, cellar_prefix_info_t *out)
@@ -77,12 +93,34 @@ static void read_conf(const char *bottle, cellar_prefix_info_t *out)
             memcpy(out->audio, p + 6, L);
             out->audio[L] = '\0';
         }
+        p = strstr(buf, "arch=");
+        if (p) {
+            const char *e = strchr(p + 5, '\n');
+            size_t L = e ? (size_t)(e - (p + 5)) : strlen(p + 5);
+            if (L >= sizeof out->arch) L = sizeof out->arch - 1;
+            memcpy(out->arch, p + 5, L);
+            out->arch[L] = '\0';
+        } else {
+            cellar_strlcpy(out->arch, sizeof out->arch, "win64");
+        }
+        p = strstr(buf, "runner=");
+        if (p) {
+            const char *e = strchr(p + 7, '\n');
+            size_t L = e ? (size_t)(e - (p + 7)) : strlen(p + 7);
+            if (L >= sizeof out->runner) L = sizeof out->runner - 1;
+            memcpy(out->runner, p + 7, L);
+            out->runner[L] = '\0';
+        } else {
+            cellar_strlcpy(out->runner, sizeof out->runner, "stable");
+        }
     }
 }
 
-cellar_status_t cellar_prefix_create(const char *root, const char *name)
+cellar_status_t cellar_prefix_create_arch(const char *root, const char *name,
+                                          const char *arch)
 {
     char bottle[640];
+    const char *a = (arch && (*arch == 'w' || *arch == 'W')) ? arch : "win64";
     if (!root || !valid_name(name))
         return CELLAR_ERR_INVALID_ARGUMENT;
     cellar_mkdir_p(root);
@@ -100,7 +138,17 @@ cellar_status_t cellar_prefix_create(const char *root, const char *name)
         cellar_mkdir_p(rt);
         cellar_mkdir_p(un);
     }
-    return write_conf(bottle, CELLAR_WIN_10, "Vulkan", "ALSA");
+    if (strncasecmp(a, "win32", 5) == 0)
+        a = "win32";
+    else
+        a = "win64";
+    return write_conf_full(bottle, CELLAR_WIN_10, "Vulkan", "ALSA", a,
+                           "stable");
+}
+
+cellar_status_t cellar_prefix_create(const char *root, const char *name)
+{
+    return cellar_prefix_create_arch(root, name, "win64");
 }
 
 static int rm_rf(const char *path)
@@ -180,6 +228,9 @@ size_t cellar_prefix_list(const char *root, cellar_prefix_info_t *out, size_t ca
         char child[1024];
         struct stat st;
         if (ent->d_name[0] == '.')
+            continue;
+        /* The workspace store is reserved, not a container. */
+        if (strcmp(ent->d_name, "workspaces") == 0)
             continue;
         snprintf(child, sizeof child, "%s/%s", root, ent->d_name);
         if (stat(child, &st) != 0 || !S_ISDIR(st.st_mode))
@@ -353,6 +404,131 @@ cellar_status_t cellar_prefix_restore(const char *root, const char *name,
         }
         free(data);
     }
+    fclose(f);
+    return CELLAR_OK;
+}
+
+cellar_status_t cellar_prefix_export(const char *root, const char *name,
+                                     const char *archive_path)
+{
+    return cellar_prefix_backup(root, name, archive_path);
+}
+
+cellar_status_t cellar_prefix_import(const char *root, const char *name,
+                                     const char *archive_path)
+{
+    return cellar_prefix_restore(root, name, archive_path);
+}
+
+cellar_status_t cellar_prefix_clone(const char *root, const char *src,
+                                    const char *dst)
+{
+    char tmp[700];
+    cellar_prefix_info_t info;
+    cellar_status_t st;
+    if (!root || !valid_name(src) || !valid_name(dst))
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (cellar_prefix_info(root, src, &info) != CELLAR_OK || !info.exists)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    snprintf(tmp, sizeof tmp, "%s/.clone-%s-%u.cbk", root, src,
+             (unsigned)cellar_getpid());
+    st = cellar_prefix_backup(root, src, tmp);
+    if (st != CELLAR_OK)
+        return st;
+    st = cellar_prefix_restore(root, dst, tmp);
+    unlink(tmp);
+    return st;
+}
+
+/* ---- generic key=value settings on prefix.conf ------------------------- */
+
+cellar_status_t cellar_prefix_get_setting(const char *root, const char *name,
+                                          const char *key,
+                                          char *out, size_t cap)
+{
+    cellar_prefix_info_t info;
+    char bottle[640], path[640], buf[2048];
+    FILE *f;
+    size_t n;
+    const char *p, *nl;
+    size_t kl;
+    if (!key || !out || cap == 0)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (cellar_prefix_info(root, name, &info) != CELLAR_OK || !info.exists)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    cellar_prefix_path(bottle, sizeof bottle, root, name);
+    cellar_path_join(path, sizeof path, bottle, "prefix.conf");
+    f = fopen(path, "r");
+    if (!f)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    kl = strlen(key);
+    for (p = buf; *p; ) {
+        nl = strchr(p, '\n');
+        size_t len = nl ? (size_t)(nl - p) : strlen(p);
+        if (len > kl && strncmp(p, key, kl) == 0 && p[kl] == '=') {
+            const char *v = p + kl + 1;
+            size_t vl = len - kl - 1;
+            if (vl >= cap) vl = cap - 1;
+            memcpy(out, v, vl);
+            out[vl] = '\0';
+            return CELLAR_OK;
+        }
+        if (!nl)
+            break;
+        p = nl + 1;
+    }
+    out[0] = '\0';
+    return CELLAR_OK;
+}
+
+cellar_status_t cellar_prefix_set_setting(const char *root, const char *name,
+                                          const char *key, const char *value)
+{
+    cellar_prefix_info_t info;
+    char bottle[640], path[640], buf[4096], nline[520];
+    FILE *f;
+    size_t n, kl;
+    int found = 0;
+    if (!key || !*key || !value)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    if (cellar_prefix_info(root, name, &info) != CELLAR_OK || !info.exists)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    cellar_prefix_path(bottle, sizeof bottle, root, name);
+    cellar_path_join(path, sizeof path, bottle, "prefix.conf");
+    f = fopen(path, "r");
+    if (!f)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    n = fread(buf, 1, sizeof buf - 1, f);
+    fclose(f);
+    buf[n] = '\0';
+    kl = strlen(key);
+    snprintf(nline, sizeof nline, "%s=%s\n", key, value);
+    f = fopen(path, "w");
+    if (!f)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    /* Rebuild the file line by line, replacing the target key. */
+    {
+        char *p = buf, *nl;
+        while (*p) {
+            nl = strchr(p, '\n');
+            size_t len = nl ? (size_t)(nl - p) : strlen(p);
+            if (len > kl && strncmp(p, key, kl) == 0 && p[kl] == '=') {
+                fputs(nline, f);
+                found = 1;
+            } else {
+                fwrite(p, 1, len, f);
+                fputc('\n', f);
+            }
+            if (!nl)
+                break;
+            p = nl + 1;
+        }
+    }
+    if (!found)
+        fputs(nline, f);
     fclose(f);
     return CELLAR_OK;
 }
