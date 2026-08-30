@@ -149,3 +149,18 @@ void cellar_strlcpy(char *dst, size_t n, const char *src)
     }
     dst[i] = '\0';
 }
+
+void cellar_strlcat(char *dst, size_t n, const char *src)
+{
+    size_t dlen = 0, slen = 0;
+    if (!dst || n == 0)
+        return;
+    while (dlen < n - 1 && dst[dlen])
+        dlen++;
+    if (src)
+        while (src[slen] && dlen + slen + 1 < n)
+            slen++;
+    if (slen)
+        memcpy(dst + dlen, src, slen);
+    dst[dlen + slen] = '\0';
+}
