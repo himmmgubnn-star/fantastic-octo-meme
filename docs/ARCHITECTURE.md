@@ -264,8 +264,17 @@ one isolated *workspace* (a Airlock prefix) plus a small `app.conf` record and a
 `tests/test_loader.c` builds a complete, valid PE32 *in memory*, then verifies
 header parsing, section mapping, RVA translation, import binding, and export
 indexing — plus negative cases (not a PE, truncated buffer, NULL args). This
-gives deterministic, fixture-free coverage. The suite runs clean under
-AddressSanitizer + UndefinedBehaviorSanitizer.
+gives deterministic, fixture-free coverage.
+
+`test_malformed_headers()` pins the bounds on every file-supplied offset:
+a section whose raw range runs past the end of the file, a `SizeOfHeaders`
+larger than the mapped image, an absurd `SizeOfImage`, and a `SizeOfHeaders`
+larger than the file on the raw-RVA path. Each case was confirmed to crash or
+fail against the pre-fix loader.
+
+Both the suites and `tools/fuzz_loader.c` run clean under AddressSanitizer +
+UndefinedBehaviorSanitizer. CI runs 40 fuzz seeds of 20,000 mutations each —
+800,000 malformed inputs — on every push.
 
 `tools/gen_sample_pe.c` writes the same synthetic PE to disk so the CLI can be
 demonstrated and inspected without MinGW.

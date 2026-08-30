@@ -1,0 +1,48 @@
+# Airlock C style.
+#
+# This file codifies the conventions the existing sources already follow, so
+# that `clang-format` is a no-op on committed code rather than a reformat.
+# Verify before changing it:
+#
+#   clang-format --dry-run --Werror $(git ls-files '*.c' '*.h')
+#
+# The build intentionally omits -Wpedantic: the Win32 export registry stores
+# function pointers as `void *` (a dlsym-style design), which pedantic mode
+# flags. The conversion is deliberate.
+---
+Language: Cpp
+BasedOnStyle: LLVM
+
+Standard: c11
+ColumnLimit: 80
+IndentWidth: 4
+TabWidth: 4
+UseTab: Never
+ContinuationIndentWidth: 4
+
+# Opening brace on its own line for functions, attached for control statements.
+BreakBeforeBraces: Linux
+
+PointerAlignment: Right
+DerivePointerAlignment: false
+AlignAfterOpenBracket: Align
+AlignConsecutiveMacros: true
+AlignConsecutiveDeclarations: false
+AlignEscapedNewlines: Left
+AlignOperands: true
+AlignTrailingComments: true
+
+AllowShortBlocksOnASingleLine: Never
+AllowShortCaseLabelsOnASingleLine: false
+AllowShortFunctionsOnASingleLine: Empty
+AllowShortIfStatementsOnASingleLine: false
+AllowShortLoopsOnASingleLine: false
+
+BinPackArguments: true
+BinPackParameters: true
+BreakBeforeBinaryOperators: None
+IndentCaseLabels: true
+KeepEmptyLinesAtTheStartOfBlocks: false
+MaxEmptyLinesToKeep: 1
+SpaceBeforeParens: ControlStatements
+SortIncludes: true

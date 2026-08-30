@@ -1,0 +1,206 @@
+name: CI
+
+on:
+  push:
+    branches: ["**"]
+  pull_request:
+  workflow_dispatch:
+
+# Cancel superseded runs on the same ref.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ---------------------------------------------------------------------------
+  # Primary build: GNU Make on Linux x86_64.
+  # ---------------------------------------------------------------------------
+  build-and-test:
+    name: make (Linux x86_64, ${{ matrix.cc }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        cc: [gcc, clang]
+    env:
+      CC: ${{ matrix.cc }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y "${CC}"
+
+      - name: Build
+        run: make -j"$(nproc)"
+
+      - name: Test
+        run: make test
+
+      - name: Compatibility test lab
+        run: ./build/airlock test
+
+      - name: Fuzz the PE loader
+        run: make fuzz
+
+      # Scoped to code and build files. ADRs and the changelog are *supposed* to
+      # name the retired brands when they explain the rename, so documentation
+      # is deliberately excluded from this check.
+      - name: No stale brand tokens in code
+        run: |
+          mapfile -t files < <(git ls-files '*.c' '*.h' '*.profile' \
+                               Makefile CMakeLists.txt)
+          if grep -InE 'CELLAR|Cellar|cellar|WINALTOR|Winaltor|winaltor' \
+               "${files[@]}" ; then
+            echo "::error::found references to a retired product name in code"
+            exit 1
+          fi
+          if git ls-files | grep -iE 'cellar|winaltor' ; then
+            echo "::error::found a retired product name in a tracked path"
+            exit 1
+          fi
+
+  # ---------------------------------------------------------------------------
+  # Memory safety. The suite is small enough to run fully instrumented.
+  # ---------------------------------------------------------------------------
+  sanitizers:
+    name: ASan + UBSan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build with sanitizers
+        run: |
+          make -j"$(nproc)" \
+            CFLAGS="-std=c11 -Iinclude -DAIRLOCK_LOG_LEVEL=2 -O1 -g \
+                    -fsanitize=address,undefined -fno-omit-frame-pointer \
+                    -fno-sanitize-recover=all"
+
+      - name: Test with sanitizers
+        run: make test
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+  # ---------------------------------------------------------------------------
+  # Loader fuzzing under sanitizers.
+  #
+  # This job exists because the loader parses untrusted Windows executables and
+  # the plain `make fuzz` target does not catch memory errors. Running it found
+  # four real out-of-bounds/over-allocation defects; see CHANGELOG.md. Keep it
+  # required.
+  # ---------------------------------------------------------------------------
+  loader-fuzz:
+    name: PE loader fuzz (ASan + UBSan)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build instrumented library and harness
+        run: |
+          make -j"$(nproc)" \
+            CFLAGS="-std=c11 -Iinclude -DAIRLOCK_LOG_LEVEL=0 -O1 -g \
+                    -fsanitize=address,undefined -fno-sanitize-recover=all"
+          make sample
+          $CC -std=c11 -Iinclude -DAIRLOCK_LOG_LEVEL=0 -O1 -g \
+              -fsanitize=address,undefined -fno-sanitize-recover=all \
+              tools/fuzz_loader.c build/libairlock.a -ldl -o build/fuzz_asan
+        env:
+          CC: gcc
+
+      - name: Fuzz 40 seeds x 20000 mutations
+        run: |
+          fail=0
+          for seed in $(seq 1 40); do
+            if ! ./build/fuzz_asan samples/hello.exe 20000 "$seed"; then
+              echo "::error::fuzz seed $seed failed"
+              fail=1
+            fi
+          done
+          exit "$fail"
+        env:
+          ASAN_OPTIONS: detect_leaks=1:strict_string_checks=1
+          UBSAN_OPTIONS: print_stacktrace=1:halt_on_error=1
+
+  # ---------------------------------------------------------------------------
+  # Mirror build system. Both must stay in sync; CI is what keeps them honest.
+  # ---------------------------------------------------------------------------
+  cmake:
+    name: cmake + ctest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure
+        run: cmake -S . -B build-cmake -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build-cmake -j"$(nproc)"
+
+      - name: Test
+        run: ctest --test-dir build-cmake --output-on-failure
+
+  # ---------------------------------------------------------------------------
+  # Cross-compile for the primary Android target. Compile-only: nothing here
+  # proves runtime behaviour on a device, and the workflow says so.
+  # ---------------------------------------------------------------------------
+  android-arm64:
+    name: Android arm64-v8a (cross-compile only)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Locate the NDK
+        id: ndk
+        run: |
+          for candidate in \
+            "${ANDROID_NDK_LATEST_HOME:-}" \
+            "${ANDROID_NDK_HOME:-}" \
+            "${ANDROID_NDK:-}" \
+            "$ANDROID_HOME/ndk"/*
+          do
+            if [ -f "$candidate/build/cmake/android.toolchain.cmake" ]; then
+              echo "path=$candidate" >> "$GITHUB_OUTPUT"
+              echo "Using NDK at $candidate"
+              exit 0
+            fi
+          done
+          echo "::error::no Android NDK found on this runner"
+          exit 1
+
+      - name: Configure
+        run: |
+          cmake -S . -B build-android \
+            -DCMAKE_TOOLCHAIN_FILE="${{ steps.ndk.outputs.path }}/build/cmake/android.toolchain.cmake" \
+            -DANDROID_ABI=arm64-v8a \
+            -DANDROID_PLATFORM=android-24
+
+      - name: Build
+        run: cmake --build build-android -j"$(nproc)"
+
+      - name: Confirm the artefacts are ARM64
+        run: |
+          file build-android/libairlock.a | tee /dev/stderr
+          readelf -h build-android/airlock-cli | grep -E 'Class|Machine'
+
+  # ---------------------------------------------------------------------------
+  # Style. Kept advisory until the whole tree has been passed through
+  # clang-format at least once; promote to a required check after that.
+  # ---------------------------------------------------------------------------
+  format:
+    name: clang-format (advisory)
+    runs-on: ubuntu-latest
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install clang-format
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y clang-format
+
+      - name: Check formatting
+        run: |
+          mapfile -t files < <(git ls-files '*.c' '*.h')
+          clang-format --dry-run --Werror "${files[@]}"

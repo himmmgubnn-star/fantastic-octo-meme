@@ -1,29 +1,74 @@
 # Airlock
 
-**Airlock** is a clean-room, Wine-style **Windows compatibility layer for Linux and Android**, written in **C11**.
+**Airlock** runs legitimate Windows software on Linux and Android in two clearly
+separate modes. It is a manager and orchestrator: it detects, configures,
+isolates, launches, and diagnoses — it does not reimplement Windows.
 
-Its goal is to let Windows programs run on Linux by providing the pieces Windows applications expect from the operating system:
+| Mode | What it does | Runtime | Status |
+|---|---|---|---|
+| **Compatibility Mode** | Runs individual Windows applications and games in an isolated per-app environment ("container") | [Wine](https://www.winehq.org/), plus [Box86](https://github.com/ptitSeb/box86)/[Box64](https://github.com/ptitSeb/box64) for x86/x86_64 translation on ARM64 hosts | runtime adapter not yet wired up |
+| **Virtual Machine Mode** | Boots a real Windows installation you supply, in a full virtual machine | [QEMU](https://www.qemu.org/) | experimental, not started |
 
-- a **PE loader** that parses and maps Windows executables (`.exe`) and libraries (`.dll`),
-- a **Win32 API layer** that implements the system DLLs Windows binaries import (`KERNEL32.dll`, `USER32.dll`, `GDI32.dll`, `ntdll.dll`, …),
-- and, down the road, a **CPU/ABI emulation layer** that lets PE code actually execute.
+These are different things and Airlock keeps them apart in code, UI, settings,
+logs, and documentation.
 
-This is the same architecture Wine uses. Airlock is a from-scratch implementation that builds up that capability incrementally — current status is in [docs/ROADMAP.md](docs/ROADMAP.md).
+- **Wine is a compatibility layer**, not an emulator. It implements the
+  Windows-facing API surface on a Unix-like host. It is fast, it is the normal
+  way to run a Windows application, and it will never run kernel-mode drivers,
+  most anti-cheat systems, or most DRM schemes. Airlock does not claim
+  otherwise.
+- **A virtual machine emulates a whole computer** and boots a guest operating
+  system. It is the fallback for software Compatibility Mode cannot run. On an
+  ARM64 host running an x86 or x64 Windows guest, the CPU instructions must be
+  translated, which is slow. VM Mode is not a path to native performance.
 
-> **Project scope.** Airlock is clean-room software: all format knowledge comes from publicly documented specifications (the Microsoft PE/COFF format) and from observing real binaries. No Wine or ReactOS source is copied.
+> **You supply the software and the license.** Airlock never bundles,
+> downloads, or generates Windows images, system files, DLLs, product keys, or
+> activation tooling, and it has no piracy-oriented features. VM Mode requires
+> you to provide your own legally obtained installation media and license.
+> Run only software you are entitled to run.
 
 ---
 
-## Why C?
+## Current status — read this before expecting anything to run
 
-A Windows compatibility layer is the rare project where **C is genuinely the right tool**:
+**Airlock cannot run a Windows application yet.** No execution backend is wired
+up: the codebase contains no call to `system()`, `popen()`, `fork()`,
+`execve()`, or any other process-spawning primitive, so nothing is ever
+launched. `airlock prefix launch` analyses the executable and tells you so.
 
-- **Raw ABI, byte-for-byte.** The PE format, Win32 calling conventions (`__stdcall`/`__fastcall`), structure layouts, and the x86 exception model are defined as exact bytes and register/stack rules. C describes these directly; a type-safe language adds friction rather than value.
-- **Near-zero footprint.** A compatibility layer must be loadable by anything with no meaningful runtime cost. C compiles to a small static library and a thin CLI.
-- **Direct OS interposition.** Airlock needs to `dlopen`, trap syscalls, map memory, and handle signals — C has first-class access to all of it.
-- **It's what Wine does.** Wine is C (plus a little assembly), and it's the most successful Windows-on-Unix project ever built.
+What exists today is real, tested, and useful on its own:
 
-By contrast, an interpreter or JIT language injects a runtime dependency, and Rust's memory-safety guarantees actively fight this domain, which is full of untyped `void*` boundary tables and dynamic, ABI-level dispatch.
+- **Airlock Core** — a C11 host-side toolkit that reads Windows executables
+  without running them: PE/COFF parsing, import and export analysis, TLS,
+  resources, manifests, delay-loads, .NET and VC-runtime requirements, and
+  detected graphics/audio/input/networking technology.
+- **A compatibility analyzer** that scores an executable against the API
+  surface Airlock knows about, lists concrete missing APIs, and recommends a
+  configuration.
+- **Container and workspace management** — isolated per-app environments with
+  their own `drive_c` tree, versioned exportable profiles, snapshots and
+  rollback, an app library, a launch doctor, and redacted support bundles.
+
+The roadmap in [docs/ROADMAP.md](docs/ROADMAP.md) is the plan for wiring up
+real runtimes. [ADR-0002](docs/adr/0002-orchestrate-dont-reimplement.md)
+explains why Airlock orchestrates Wine and QEMU instead of reimplementing them.
+
+---
+
+## Why C for the core?
+
+Airlock Core is C11. That is the right tool for the part that reads binaries:
+
+- **Raw ABI, byte-for-byte.** The PE format, Win32 calling conventions, and
+  structure layouts are defined as exact bytes. C describes them directly.
+- **Near-zero footprint.** It compiles to a small static library and a thin CLI,
+  and links against nothing but libc.
+- **Direct OS access.** It needs to `mmap`, handle signals, and `dlopen`.
+
+Higher layers use the right tool for their job: the Android UI is Kotlin with
+Jetpack Compose over a deliberately minimal JNI surface, and the Linux UI is
+Qt 6/QML. Neither exists yet; see the roadmap.
 
 ---
 
@@ -244,6 +289,9 @@ Airlock ships a performance kit aimed at game-like Windows workloads:
 
 ## What works today
 
+Everything below is host-side analysis or metadata management. None of it
+executes Windows code.
+
 - **PE parsing** — DOS/COFF/optional headers (32- and 64-bit), section tables, and the data directories (imports, exports, base relocations).
 - **Section mapping** — assembles a section-aligned virtual image so RVA lookups and the entry point behave as on Windows.
 - **Import resolution** — walks each DLL's import table and binds thunks to Airlock's native Win32 functions via an O(1) export registry.
@@ -391,10 +439,24 @@ docs/
 - **Format knowledge is centralized** in `include/airlock/pe.h` as *packed* structs that mirror the on-disk PE layout, so parsers map a buffer directly onto them.
 - **Everything is host-endian-safe.** On-disk scalars are read little-endian; the loader is correct on big-endian hosts too.
 - **The registry is O(1).** Modules are indexed by a stable hash of the DLL name, exports by a hash of the function name — import binding is fast.
-- **Safety first.** All RVA reads are bounds-checked; malformed images yield a typed `airlock_status_t` error rather than a crash. Tests include fuzz-style negative cases.
+- **Safety first.** Executables are untrusted input. Every file-supplied offset is bounded against the bytes actually held, not against what the headers claim; malformed images yield a typed `airlock_status_t` error rather than a crash. CI fuzzes the loader with 800,000 mutated inputs under ASan+UBSan on every push, and `test_malformed_headers()` pins the bounds that fuzzing found missing.
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, and [docs/ROADMAP.md](docs/ROADMAP.md) for where this is going (execution, relocation, threads, the GUI stack, …).
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design and
+[docs/ROADMAP.md](docs/ROADMAP.md) for the phase plan.
 
-## License
+## License and attribution
 
-MIT
+Airlock is [MIT licensed](LICENSE). Every source file carries an
+`SPDX-License-Identifier: MIT` header.
+
+Airlock currently **bundles no third-party component** — it links against the
+host system only. The components it is designed to invoke (Wine, Box86/Box64,
+DXVK, VKD3D-Proton, QEMU, Mesa) are separate upstream projects with their own
+licenses, recorded with their obligations in
+[THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES).
+
+No Wine, ReactOS, or Winlator source, branding, or assets are included, and no
+Microsoft Windows binaries, system files, or installation media are included.
+
+Security expectations, the threat model, and what Airlock deliberately does
+**not** promise are in [SECURITY.md](SECURITY.md).

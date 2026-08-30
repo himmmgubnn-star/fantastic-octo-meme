@@ -1,0 +1,89 @@
+# Third-party notices
+
+This file records every third-party component Airlock uses, bundles, or
+redistributes, together with its license and the obligations that come with it.
+
+## Airlock itself
+
+Airlock is licensed under the MIT License. See [LICENSE](LICENSE).
+
+All source code in this repository is original work by the Airlock authors.
+Specifically, and as verified by inspection of every tracked file:
+
+- **No Wine source code** is included.
+- **No ReactOS source code** is included.
+- **No Winlator source code, branding, or assets** are included.
+- **No Microsoft Windows binaries, DLLs, system files, icons, branding,
+  installation media, or product keys** are included.
+- The only non-source tracked files are `.gitignore`, `Makefile`,
+  `CMakeLists.txt`, and this documentation.
+
+The PE/COFF structures in `include/airlock/pe.h` describe a publicly documented
+file format; implementing a documented format is not a derivative work of any
+particular implementation.
+
+## Nothing is currently bundled
+
+As of this revision, Airlock **bundles and redistributes no third-party
+component**. It has no runtime dependency beyond a C11 compiler, a POSIX libc,
+and (optionally) ALSA for desktop audio output, all of which are linked against
+the host system rather than shipped by us.
+
+That is a deliberate property and it is enforced by review: the table below
+lists components Airlock is *designed to invoke on the host or to fetch with the
+user's explicit consent* — it does not mean they are in the repository.
+
+## Components Airlock invokes or may fetch
+
+Airlock is an orchestrator. Its job is to locate, configure, and launch mature
+upstream components as **separate processes**, not to reimplement them. When a
+component is merely executed as a separate program that the user installed or
+explicitly consented to download, Airlock does not create a derivative work of
+it and does not redistribute it.
+
+| Component | Role in Airlock | Upstream license | Bundled today? | Redistribution obligation if bundled |
+|---|---|---|---|---|
+| [Wine](https://www.winehq.org/) | Compatibility Mode runtime | LGPL-2.1-or-later | No | Ship the full license text, state changes, and provide corresponding source. Do not statically link Airlock's MIT code into it. |
+| [Box86](https://github.com/ptitSeb/box86) | x86 user-mode translation on ARM | MIT | No | Preserve copyright notice and permission notice. |
+| [Box64](https://github.com/ptitSeb/box64) | x86_64 user-mode translation on ARM | MIT | No | Preserve copyright notice and permission notice. |
+| [DXVK](https://github.com/doitsujin/dxvk) | Direct3D 9/10/11 → Vulkan | Zlib | No | Preserve copyright notice and permission notice. |
+| [VKD3D-Proton](https://github.com/HansKristian-Work/vkd3d-proton) | Direct3D 12 → Vulkan | LGPL-2.1 | No | Ship the full license text, state changes, and provide corresponding source. |
+| [QEMU](https://www.qemu.org/) | VM Mode full-system virtualizer | GPL-2.0-only (some parts BSD/MIT — verify per revision) | No | GPL-2.0 applies to the distributed QEMU binary and requires corresponding source. **Airlock's own code must stay a separate program invoking QEMU through `execve`; do not link against QEMU internals.** |
+| [Mesa](https://www.mesa3d.org/) | Host Vulkan/OpenGL drivers | MIT (plus Khronos/SGI/Boost parts) | No | Preserve copyright notices. |
+| ALSA (`libasound`) | Desktop audio output | LGPL-2.1 | No (system library, optional build flag) | Dynamic linking against a system library imposes no redistribution duty on us. |
+
+License facts above were checked against upstream project documentation on
+2026-08-30. **Re-verify against the exact revision before any component is
+bundled** — licenses and dual-licensing terms change.
+
+## Rules for adding a bundled component
+
+A component may only be added to a release when all of the following exist:
+
+1. An entry in this file naming the component, its **exact upstream revision or
+   version**, its license, and the obligations that apply.
+2. The complete license text under `licenses/<component>/`.
+3. A reproducible build script under `third_party/<component>/` that fetches
+   that exact revision and builds it.
+4. One patch per local modification under `patches/<component>/`, each with a
+   header stating why it exists and whether it has been sent upstream.
+5. An entry in the in-app licenses screen.
+6. Confirmation that the license permits redistribution in the form we ship
+   (source, binary, or both). If it does not, the component is fetched at
+   runtime with the user's explicit consent instead of being bundled.
+
+## Components we will not bundle
+
+- Microsoft Windows in any form: system files, DLLs, drivers, installation
+  media, product keys, activation tooling, or branding. VM Mode requires the
+  user to supply their own legally obtained ISO and license.
+- Copyrighted fonts, codecs, or game data.
+- Anti-cheat, DRM-circumvention, or malware-evasion components.
+
+## Trademarks
+
+"Airlock" as used here is the name of this project. It is not affiliated with,
+endorsed by, or sponsored by the Wine project, the Box86/Box64 project, the
+QEMU project, the DXVK or VKD3D-Proton projects, or Microsoft. "Windows" is a
+trademark of Microsoft Corporation and is used here only to describe the
+software Airlock interoperates with.
