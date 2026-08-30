@@ -1,150 +1,121 @@
-# Discord Lua/Luau Obfuscator Bot · v1.1
+# Cellar
 
-Production Discord bot that obfuscates **Lua / Luau** for **Roblox ModuleScript** protection — plus security scanning, analysis, level comparison, watermarks, and rich interactive replies.
+**Cellar** is a clean-room, Wine-style **Windows compatibility layer for Linux**, written in **C11**.
 
-> **Important:** Obfuscation raises the cost of casual cracking. It is **not** cryptographic security. Never put secrets in client or shared modules.
+Its goal is to let Windows programs run on Linux by providing the pieces Windows applications expect from the operating system:
 
-## What’s new in 1.1
+- a **PE loader** that parses and maps Windows executables (`.exe`) and libraries (`.dll`),
+- a **Win32 API layer** that implements the system DLLs Windows binaries import (`KERNEL32.dll`, `USER32.dll`, `GDI32.dll`, `ntdll.dll`, …),
+- and, down the road, a **CPU/ABI emulation layer** that lets PE code actually execute.
 
-| Feature | Command / behavior |
-|---|---|
-| Security scanner | `/scan` — secrets, webhooks, `loadstring`, exploit APIs, grade A–F |
-| Source analyzer | `/analyze` — metrics, Roblox APIs, recommendations |
-| Level compare | `/compare` — light + standard + heavy in one shot |
-| Usage stats | `/stats` — totals, expansion ratio, uptime |
-| Help embed | `/help` |
-| Watermarks | `watermark:` option / `wm:Name` prefix flag |
-| Re-run buttons | Light / Standard / Heavy on every result (10 min session) |
-| Reply-to-code | `!obfuscate` as a **reply** to a code message |
-| Rich embeds | Size, passes, fingerprint, duration, security hints |
-| Stronger passes | String split, junk locals, function proxies, anti-tamper, VM prologue |
-| Persistent stats | `data/stats.json` |
+This is the same architecture Wine uses. Cellar is a from-scratch implementation that builds up that capability incrementally — current status is in [docs/ROADMAP.md](docs/ROADMAP.md).
 
-## Features (full)
+> **Project scope.** Cellar is clean-room software: all format knowledge comes from publicly documented specifications (the Microsoft PE/COFF format) and from observing real binaries. No Wine or ReactOS source is copied.
 
-### Obfuscation pipeline
+---
 
-1. VM-lite prologue (`heavy`)
-2. Control-flow flattening (`heavy`)
-3. Opaque predicates
-4. Junk locals
-5. Function proxy wrappers
-6. Local / parameter renaming (Roblox globals preserved)
-7. Opaque numbers
-8. String splitting
-9. XOR string table encryption
-10. Minify / strip comments
-11. Bootstrap + optional anti-tamper + watermark
+## Why C?
 
-### Discord UX
+A Windows compatibility layer is the rare project where **C is genuinely the right tool**:
 
-- `/obfuscate` · `/scan` · `/analyze` · `/compare` · `/stats` · `/help`
-- Prefix `!obfuscate [light|standard|heavy] [wm:Tag]`
-- File attachments (`.lua`, `.luau`, `.txt`) or pasted source
-- Ephemeral replies by default
-- Per-user rate limits + byte caps + optional allowlists
+- **Raw ABI, byte-for-byte.** The PE format, Win32 calling conventions (`__stdcall`/`__fastcall`), structure layouts, and the x86 exception model are defined as exact bytes and register/stack rules. C describes these directly; a type-safe language adds friction rather than value.
+- **Near-zero footprint.** A compatibility layer must be loadable by anything with no meaningful runtime cost. C compiles to a small static library and a thin CLI.
+- **Direct OS interposition.** Cellar needs to `dlopen`, trap syscalls, map memory, and handle signals — C has first-class access to all of it.
+- **It's what Wine does.** Wine is C (plus a little assembly), and it's the most successful Windows-on-Unix project ever built.
+
+By contrast, an interpreter or JIT language injects a runtime dependency, and Rust's memory-safety guarantees actively fight this domain, which is full of untyped `void*` boundary tables and dynamic, ABI-level dispatch.
+
+---
+
+## Building
+
+Requires a C11 compiler (GCC or Clang), GNU Make, and `ar`.
+
+```sh
+make            # build the `cellar` CLI + libcellar.a
+make test       # build and run the unit tests
+make sample     # generate a synthetic test PE -> samples/hello.exe
+make clean      # remove build artifacts
+```
+
+Optional knobs: `CC`, `CFLAGS`, and `CELLAR_LOG_LEVEL` (0–4, default 2 = info).
+
+No third-party libraries are used — everything is C11 + POSIX.
 
 ## Quick start
 
-```bash
-cd discord-lua-obfuscator
-cp .env.example .env   # set DISCORD_TOKEN + DISCORD_CLIENT_ID
-npm install
-npm run register-commands   # REQUIRED after upgrading to 1.1 (new slash cmds)
-npm start
+```sh
+$ make test
+test_loader: all tests passed
+
+$ make sample
+wrote samples/hello.exe (1792 bytes)
+
+$ ./build/cellar samples/hello.exe
+== samples/hello.exe ==
+  format         PE/32-bit  (x86)
+  kind           executable
+  subsystem      windows-console
+  entry point    RVA 0x00001000
+  image base     0x00400000
+  ...
+  imports:
+    KERNEL32.dll     ExitProcess
+    KERNEL32.dll     GetStdHandle
 ```
 
-**Enable Message Content Intent** in the Discord Developer Portal (for prefix commands).
+`make sample` synthesizes a real, loadable PE without MinGW — handy for exercising the loader on a machine with no Windows toolchain. You can also point `cellar` at any genuine `.exe`.
 
-## Usage
-
-```
-/obfuscate file:Module.lua level:standard watermark:MyGame ephemeral:true
-/scan file:Module.lua
-/analyze code:local x=1 return x
-/compare file:Module.lua
-/stats
-/help
+```sh
+cellar program.exe          # load + report a Windows executable
+cellar --list-modules       # show registered Win32 modules & exports
+cellar --help
 ```
 
-Prefix:
+## What works today
 
-````
-!obfuscate heavy wm:MyGame
-```lua
-local x = 1
-return x
-```
-````
+- **PE parsing** — DOS/COFF/optional headers (32- and 64-bit), section tables, and the data directories (imports, exports, base relocations).
+- **Section mapping** — assembles a section-aligned virtual image so RVA lookups and the entry point behave as on Windows.
+- **Import resolution** — walks each DLL's import table and binds thunks to Cellar's native Win32 functions via an O(1) export registry.
+- **Export indexing** — parses a module's export directory into a name index.
+- **Win32 registry** — a first `KERNEL32.dll` module with initial implementations (`ExitProcess`, `GetStdHandle`, `WriteFile`, `LoadLibraryA`, `GetProcAddress`, `GetLastError`, …).
+- **Unit tests** — build a synthetic PE in memory and verify the whole pipeline, plus negative cases; runs clean under AddressSanitizer/UBsan.
 
-Or reply to any message that has code/file with:
-
-```
-!obfuscate standard
-```
-
-## Levels
-
-| Level | Extra beyond rename+minify |
-|---|---|
-| `light` | bootstrap |
-| `standard` | strings, split, numbers, junk, proxies, predicates, anti-tamper |
-| `heavy` | + control-flow + VM prologue |
-
-## Architecture
+## Layout
 
 ```
+include/cellar/          public headers
+  cellar.h               status codes, logging, common utilities
+  pe.h                   clean-room PE/COFF format definitions
+  loader.h               loader API + in-memory image model
+  win32.h                Win32 export registry API
 src/
-  index.js
-  config.js
-  bot/
-    commands.js          # all slash + prefix + button handlers
-    embeds.js            # rich embed builders
-    registerCommands.js
-  obfuscator/
-    index.js             # obfuscate() pipeline
-    passes.js            # all transform passes
-    tokenizer.js
-    keywords.js
-    random.js
-    securityScan.js      # /scan engine
-    analyze.js           # /analyze engine
-  utils/
-    logger.js
-    rateLimiter.js
-    codeExtraction.js
-    sessionCache.js      # button re-run sessions
-    stats.js             # persistent counters
+  loader/
+    cellar_util.c        status strings, logging, endian reads, hashing
+    pe.c                 header + section parsing, RVA translation
+    loader.c             full image-load pipeline, imports, exports
+  win32/
+    api.c                export registry (module + function lookup)
+    mod_kernel32.c       first KERNEL32.dll implementation
+    init.c               module registration bootstrap
+  cli.c                  command-line driver
+tests/
+  test_loader.c          unit tests (synthetic-PE driven)
+tools/
+  gen_sample_pe.c        writes a minimal valid PE for testing
+docs/
+  ARCHITECTURE.md        how the pieces fit together
+  ROADMAP.md             the path to actually running Windows programs
 ```
 
-## Environment
+## Design notes
 
-| Variable | Required | Default |
-|---|---|---|
-| `DISCORD_TOKEN` | yes | — |
-| `DISCORD_CLIENT_ID` | yes | — |
-| `DISCORD_GUILD_ID` | no | — (faster command register) |
-| `ALLOWED_USER_IDS` | no | all users |
-| `ALLOWED_GUILD_IDS` | no | all guilds |
-| `MAX_CODE_BYTES` | no | `65536` |
-| `MAX_OUTPUT_BYTES` | no | `262144` |
-| `RATE_LIMIT_WINDOW_MS` | no | `60000` |
-| `RATE_LIMIT_MAX_REQUESTS` | no | `5` |
-| `LOG_LEVEL` | no | `info` |
+- **Format knowledge is centralized** in `include/cellar/pe.h` as *packed* structs that mirror the on-disk PE layout, so parsers map a buffer directly onto them.
+- **Everything is host-endian-safe.** On-disk scalars are read little-endian; the loader is correct on big-endian hosts too.
+- **The registry is O(1).** Modules are indexed by a stable hash of the DLL name, exports by a hash of the function name — import binding is fast.
+- **Safety first.** All RVA reads are bounds-checked; malformed images yield a typed `cellar_status_t` error rather than a crash. Tests include fuzz-style negative cases.
 
-## Tests
-
-```bash
-npm test
-```
-
-## Security notes
-
-1. Obfuscation ≠ server authority. Economy / anti-cheat stay server-side.
-2. `/scan` is a helper, not a guarantee — review findings yourself.
-3. Watermarks are plaintext headers for ownership tagging, not crypto.
-4. Button sessions hold source in memory for 10 minutes; single-process only.
-5. Never commit `.env` or `data/stats.json` if sensitive.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full design, and [docs/ROADMAP.md](docs/ROADMAP.md) for where this is going (execution, relocation, threads, the GUI stack, …).
 
 ## License
 

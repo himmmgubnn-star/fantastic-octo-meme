@@ -1,11 +1,16 @@
-node_modules/
-.env
+# Build output
+/build/
+*.o
+*.a
+
+# Generated test executable
+/samples/hello.exe
+
+# Editors / OS
 .DS_Store
-*.log
-coverage/
-.arena/
-dist/
-tmp/
-output/
-data/
-*.tmp
+*.swp
+*~
+
+# Misc
+.env
+node_modules/

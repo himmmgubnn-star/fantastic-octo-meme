@@ -1,0 +1,130 @@
+# Cellar Architecture
+
+Cellar brings Windows programs to Linux by supplying the pieces a Windows
+binary expects from the OS. This document describes how those pieces are
+structured and how they fit together.
+
+## Overview
+
+```
+   Windows binary (.exe / .dll)
+        │  raw bytes
+        ▼
+ ┌───────────────┐    ┌─────────────────┐    ┌──────────────────────────┐
+ │  PE loader     │──▶│  Image model     │──▶│  CPU / ABI emulation     │
+ │  (src/loader)  │    │  cellar_image_t  │    │  (planned — see roadmap) │
+ └───────────────┘    └────────┬─────────┘    └──────────────────────────┘
+                               │ imports
+                               ▼
+                  ┌──────────────────────────┐
+                  │  Win32 API layer          │
+                  │  (src/win32)              │
+                  │  KERNEL32.dll, USER32.dll │
+                  │  ... → Linux syscalls     │
+                  └──────────────────────────┘
+```
+
+There are three responsibilities, each intentionally decoupled:
+
+1. **Parsing** — turn raw bytes into a validated, structured description of
+   the PE (headers, sections, imports, exports, relocations).
+2. **Mapping** — assemble a section-aligned *virtual image* so that relative
+   virtual addresses (RVAs) and the entry point behave like they do on
+   Windows.
+3. **Execution** — run the entry point, resolving every call into a Win32 API
+   Cellar implements. *(Not yet implemented — see ROADMAP.md.)*
+
+## The PE loader (`src/loader`)
+
+### Format definitions — `include/cellar/pe.h`
+
+The PE/COFF layout is captured as **packed** structs that mirror the on-disk
+format exactly (e.g. `IMAGE_DOS_HEADER`, `IMAGE_FILE_HEADER`,
+`IMAGE_OPTIONAL_HEADER`, `IMAGE_SECTION_HEADER`, the import/export
+directories). Because they are packed, the parser can map a file buffer onto
+them directly. All on-disk integers are little-endian and are read through
+`cellar_le16/32/64` helpers, so the loader is correct regardless of host
+byte order.
+
+### Parsing — `src/loader/pe.c`
+
+`cellar_parse_headers()` validates signatures (`MZ`, `PE\0\0`, optional-header
+magic `PE32`/`PE32+`), checks that every claimed structure fits inside the
+buffer, and populates the header fields plus the section table. It returns a
+typed `cellar_status_t` on any problem instead of dereferencing garbage.
+
+RVA translation lives here too:
+
+- `cellar_image_rva()` maps an RVA into the assembled virtual image.
+- `cellar_image_rva_raw()` maps an RVA back to the original file bytes.
+- `cellar_image_read()` is a bounds-checked memcpy against the image.
+
+### Loading — `src/loader/loader.c`
+
+`cellar_image_load_file()` / `cellar_image_load_buffer()` run the pipeline:
+
+1. **Parse headers** into a `cellar_image_t`.
+2. **Copy** the raw buffer so the image owns its bytes.
+3. **Map sections** — `calloc` a section-aligned image sized by
+   `size_of_image`, copy the headers region, then copy each section's raw data
+   to its virtual address. Section boundaries are clamped so malformed images
+   can't overflow.
+4. **Parse imports** — walk the import descriptor array; for each thunk, read
+   the hint/name (or ordinal) and resolve it against the Win32 registry,
+   recording `module`, `name`, `ordinal`, and the resolved `fn`.
+5. **Parse exports** — read the export directory and copy each named export
+   into the image's name index.
+6. **Parse relocations** — validate the base-relocation blocks (application
+   of relocations will come with the execution layer).
+
+## The Win32 API layer (`src/win32`)
+
+Windows executables call functions in system DLLs. Cellar models each system
+DLL as a *module* holding an array of `{name, fn}` export entries.
+
+### Registry — `src/win32/api.c`
+
+- `cellar_win32_register_module()` adds a module descriptor (referenced, not
+  copied — descriptors must outlive the process).
+- Module names are compared case- and extension-insensitively, so
+  `kernel32` ≡ `KERNEL32.dll`.
+- `cellar_win32_resolve(module, function, ordinal)` returns the Cellar
+  function pointer for an import, or `NULL` (logged) when unknown.
+
+The loader calls `cellar_win32_resolve()` for every import thunk, so a Windows
+binary binds to Cellar's native implementations exactly as it would bind to
+real DLLs.
+
+### Modules — `src/win32/mod_*.c`
+
+Each `mod_*.c` implements one Win32 DLL. Functions are written in C and
+exported through the module table. Today they are honest **functional stubs**:
+they log the call and return a harmless value. Real implementations map to
+Linux syscalls and libc (file I/O, the console, timers, the heap, …).
+
+`src/win32/init.c` registers every module via `cellar_win32_init()`.
+
+## The CLI — `src/cli.c`
+
+A thin driver: `cellar_win32_init()`, then either dump the module registry or
+load and report one or more executables. It is intentionally small — it is a
+demo and debugging surface, not the product.
+
+## Conventions
+
+- **Public API lives in `include/cellar/`**; internal helpers are `static`.
+- **All failure paths return `cellar_status_t`** — never abort, never leak.
+- **All RVA access is bounds-checked.** Malformed input must produce a typed
+  error, not a crash.
+- **Logging is compile-time configurable** via `CELLAR_LOG_LEVEL` (0–4).
+
+## Testing strategy
+
+`tests/test_loader.c` builds a complete, valid PE32 *in memory*, then verifies
+header parsing, section mapping, RVA translation, import binding, and export
+indexing — plus negative cases (not a PE, truncated buffer, NULL args). This
+gives deterministic, fixture-free coverage. The suite runs clean under
+AddressSanitizer + UndefinedBehaviorSanitizer.
+
+`tools/gen_sample_pe.c` writes the same synthetic PE to disk so the CLI can be
+demonstrated and inspected without MinGW.
