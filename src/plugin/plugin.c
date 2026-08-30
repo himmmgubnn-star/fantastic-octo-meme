@@ -3,11 +3,15 @@
  *
  * SPDX-License-Identifier: MIT
  */
+#define _POSIX_C_SOURCE 200809L
+
 #include <stdlib.h>
 #include <string.h>
 
 #ifdef __unix__
+#include <dirent.h>
 #include <dlfcn.h>
+#include <stdio.h>
 #endif
 
 #include "cellar/cellar.h"
@@ -32,6 +36,13 @@ static void seed_defaults(void)
     cellar_backend_register(CELLAR_BACKEND_AUDIO, "ALSA",     0, 1);
     cellar_backend_register(CELLAR_BACKEND_AUDIO, "PipeWire", 1, 0);
     cellar_backend_register(CELLAR_BACKEND_AUDIO, "WAV",      2, 1);
+    cellar_backend_register(CELLAR_BACKEND_INPUT, "XInput", 0, 1);
+    cellar_backend_register(CELLAR_BACKEND_NETWORK, "Winsock", 0, 1);
+    cellar_backend_register(CELLAR_BACKEND_A11Y, "AT-SPI", 0, 1);
+    cellar_backend_register(CELLAR_BACKEND_PRINT, "CUPS", 0, 0);
+    cellar_backend_register(CELLAR_BACKEND_PRINT, "File", 1, 1);
+    cellar_backend_register(CELLAR_BACKEND_DEVICE, "libusb", 0, 0);
+    cellar_backend_register(CELLAR_BACKEND_DEVICE, "Stub", 1, 1);
 }
 
 void cellar_backend_init(void) { seed_defaults(); }
@@ -118,6 +129,32 @@ cellar_status_t cellar_plugin_load(const char *path)
     return CELLAR_OK;
 #else
     (void)path;
+    return CELLAR_ERR_NOT_IMPLEMENTED;
+#endif
+}
+
+cellar_status_t cellar_plugin_load_dir(const char *dir)
+{
+#ifdef __unix__
+    DIR *d;
+    struct dirent *ent;
+    if (!dir || !*dir)
+        return CELLAR_ERR_INVALID_ARGUMENT;
+    d = opendir(dir);
+    if (!d)
+        return CELLAR_OK; /* missing plugin dir is not an error */
+    while ((ent = readdir(d)) != NULL) {
+        size_t n = strlen(ent->d_name);
+        char path[1024];
+        if (n < 4 || strcmp(ent->d_name + n - 3, ".so") != 0)
+            continue;
+        snprintf(path, sizeof path, "%s/%s", dir, ent->d_name);
+        (void)cellar_plugin_load(path);
+    }
+    closedir(d);
+    return CELLAR_OK;
+#else
+    (void)dir;
     return CELLAR_ERR_NOT_IMPLEMENTED;
 #endif
 }

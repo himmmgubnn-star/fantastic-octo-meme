@@ -21,6 +21,9 @@ typedef enum cellar_backend_kind {
     CELLAR_BACKEND_AUDIO,
     CELLAR_BACKEND_INPUT,
     CELLAR_BACKEND_NETWORK,
+    CELLAR_BACKEND_A11Y,
+    CELLAR_BACKEND_PRINT,
+    CELLAR_BACKEND_DEVICE,
     CELLAR_BACKEND_KIND_COUNT
 } cellar_backend_kind_t;
 

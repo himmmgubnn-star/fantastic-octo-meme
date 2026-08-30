@@ -39,6 +39,15 @@ LIB_SRCS = \
 	src/win32/api.c \
 	src/win32/mod_kernel32.c \
 	src/win32/mod_winmm.c \
+	src/win32/mod_user32.c \
+	src/win32/mod_advapi32.c \
+	src/win32/mod_shell32.c \
+	src/win32/mod_ole32.c \
+	src/win32/mod_comdlg32.c \
+	src/win32/mod_gdi32.c \
+	src/win32/mod_ws2_32.c \
+	src/win32/mod_version.c \
+	src/win32/mod_ntdll.c \
 	src/win32/init.c \
 	src/port/posix.c \
 	src/audio/audio.c \
@@ -51,7 +60,25 @@ LIB_SRCS = \
 	src/trace/trace.c \
 	src/gfx/shadercache.c \
 	src/plugin/plugin.c \
-	src/crash/crash.c
+	src/crash/crash.c \
+	src/inspect/inspect.c \
+	src/db/db.c \
+	src/runtime/runtime.c \
+	src/shell/shell.c \
+	src/prefix/prefix.c \
+	src/display/display.c \
+	src/security/security.c \
+	src/desktop/desktop.c \
+	src/installer/installer.c \
+	src/com/com.c \
+	src/service/service.c \
+	src/notify/notify.c \
+	src/a11y/a11y.c \
+	src/locale/locale.c \
+	src/print/print.c \
+	src/device/device.c \
+	src/debug/debug.c \
+	src/testlab/testlab.c
 
 # Optional ALSA backend for real audio on desktop Linux:
 #   make ALSA=1            (requires libasound2-dev)
@@ -63,7 +90,7 @@ LDLIBS   := $(if $(ALSA),-lasound)
 LDLIBS   += -ldl
 
 LIB_OBJS = $(patsubst src/%.c,$(BUILD)/obj/%.o,$(LIB_SRCS))
-TEST_BINS = test_loader test_audio test_perf test_compat test_kit
+TEST_BINS = test_loader test_audio test_perf test_compat test_kit test_ecosystem
 GEN       = $(BUILD)/gen_sample_pe
 FUZZ      = $(BUILD)/fuzz_loader
 SAMPLE    = samples/hello.exe
@@ -89,6 +116,8 @@ $(BUILD)/test_compat: tests/test_compat.c $(LIB)
 	$(CC) $(CFLAGS) tests/test_compat.c $(LIB) $(LDLIBS) -o $@
 $(BUILD)/test_kit: tests/test_kit.c $(LIB)
 	$(CC) $(CFLAGS) tests/test_kit.c $(LIB) $(LDLIBS) -o $@
+$(BUILD)/test_ecosystem: tests/test_ecosystem.c $(LIB)
+	$(CC) $(CFLAGS) tests/test_ecosystem.c $(LIB) $(LDLIBS) -o $@
 
 $(GEN): tools/gen_sample_pe.c
 	@mkdir -p $(dir $@)

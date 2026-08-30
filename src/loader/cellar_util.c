@@ -4,8 +4,14 @@
  *
  * SPDX-License-Identifier: MIT
  */
+#define _POSIX_C_SOURCE 200809L
+
+#include <errno.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <string.h>
+#include <sys/stat.h>
+#include <sys/types.h>
 
 #include "cellar/cellar.h"
 
@@ -83,4 +89,63 @@ uint32_t cellar_hash_str(const char *s)
     while ((c = (unsigned char)*s++) != 0)
         h = ((h << 5) + h) + c; /* h * 33 + c */
     return h;
+}
+
+int cellar_mkdir_p(const char *path)
+{
+    char tmp[1024];
+    size_t i, n;
+    if (!path || !*path)
+        return -1;
+    snprintf(tmp, sizeof tmp, "%s", path);
+    n = strlen(tmp);
+    while (n > 0 && tmp[n - 1] == '/') {
+        tmp[--n] = '\0';
+    }
+    for (i = 1; i < n; i++) {
+        if (tmp[i] == '/') {
+            tmp[i] = '\0';
+            if (mkdir(tmp, 0755) != 0 && errno != EEXIST) {
+                tmp[i] = '/';
+                return -1;
+            }
+            tmp[i] = '/';
+        }
+    }
+    if (mkdir(tmp, 0755) != 0 && errno != EEXIST)
+        return -1;
+    return 0;
+}
+
+void cellar_path_join(char *dst, size_t n, const char *a, const char *b)
+{
+    size_t la;
+    if (!dst || n == 0)
+        return;
+    dst[0] = '\0';
+    if (!a) a = "";
+    if (!b) b = "";
+    la = strlen(a);
+    if (la > 0 && a[la - 1] == '/')
+        snprintf(dst, n, "%s%s", a, b);
+    else if (la == 0)
+        snprintf(dst, n, "%s", b);
+    else
+        snprintf(dst, n, "%s/%s", a, b);
+}
+
+void cellar_strlcpy(char *dst, size_t n, const char *src)
+{
+    size_t i = 0;
+    if (!dst || n == 0)
+        return;
+    if (!src) {
+        dst[0] = '\0';
+        return;
+    }
+    while (i + 1 < n && src[i]) {
+        dst[i] = src[i];
+        i++;
+    }
+    dst[i] = '\0';
 }

@@ -16,10 +16,10 @@
 
 /* Version — aligned with the latest tagged milestone. */
 #define CELLAR_VERSION_MAJOR 0
-#define CELLAR_VERSION_MINOR 1
+#define CELLAR_VERSION_MINOR 2
 #define CELLAR_VERSION_PATCH 0
 
-#define CELLAR_VERSION_STRING "0.1.0"
+#define CELLAR_VERSION_STRING "0.2.0"
 
 /* Forward-declared image model (defined in <cellar/loader.h>). */
 struct cellar_image;
@@ -119,5 +119,14 @@ uint64_t cellar_le64(const void *p);
 
 /* Stable string hash used to index export tables. djb2 / Bernstein. */
 uint32_t cellar_hash_str(const char *s);
+
+/* Recursively create a directory (POSIX mkdir -p). Returns 0 on success. */
+int cellar_mkdir_p(const char *path);
+
+/* Join two path components into `dst` (always NUL-terminated). */
+void cellar_path_join(char *dst, size_t n, const char *a, const char *b);
+
+/* Bounded copy; always NUL-terminates. */
+void cellar_strlcpy(char *dst, size_t n, const char *src);
 
 #endif /* CELLAR_CELLAR_H */

@@ -191,8 +191,42 @@ The flagship. `cellar_compat_analyze()` takes a loaded image and:
 
 A thin driver: `cellar_win32_init()`, then either dump the module registry or
 load and report one or more executables. It is intentionally small — it is a
-demo and debugging surface, not the product. Subcommands: `analyze`, `--perf`,
-`--platform`, `--audio`, `--papi=1`, and `--trace=...`.
+demo and debugging surface, not the product. Subcommands: `inspect`, `analyze`,
+`db`, `prefix`, `runtime`, `test`, `debug`, `--perf`, `--platform`, `--audio`,
+`--papi=1`, and `--trace=...`.
+
+## Compatibility ecosystem (Milestone 4.8)
+
+Five systems sit *around* the loader so Cellar can understand, remember, and
+isolate Windows applications before it can execute them:
+
+1. **Inspector** (`src/inspect/inspect.c`) — walks PE data directories (TLS,
+   resources / RT_MANIFEST, COM/CLR, delay-load) and classifies imported DLLs
+   into graphics/audio/input/net plus .NET / VC-runtime requirements.
+2. **Compatibility database** (`src/db/db.c`) — a text catalog (`compat.db`)
+   of per-application requirements, a HIGH/MEDIUM/LOW rating derived from the
+   analyzer score, and known issues. This is designed to become one of the
+   project's biggest assets as real apps are inspected.
+3. **Prefix manager** (`src/prefix/prefix.c` + `src/shell/shell.c`) — named
+   bottles with a `drive_c` tree. Shell variables (`%APPDATA%`, `%WINDIR%`, …)
+   expand into that tree. Backup/restore uses a tiny `CBK1` archive.
+4. **Test lab** (`src/testlab/testlab.c`) — behavioral tests plus one
+   auto-generated export-presence test per registered Win32 function.
+5. **COM + shell** (`src/com/com.c`, `src/win32/mod_ole32.c`,
+   `src/win32/mod_shell32.c`) — IUnknown/GUIDs/apartments/class factories, and
+   `SHGetFolderPathA` / `ShellExecuteA` on top of the shell map.
+
+Supporting layers: runtime manager, desktop integration, virtual display,
+security (SID/ACL → uid), installer journal, user-space services,
+notifications, accessibility tree, locale/code pages, printing, devices.
+
+### Win32 modules
+
+Each system DLL is an independent `src/win32/mod_*.c` file registered from
+`init.c`. Adding a new API is "implement the C function, add a row to that
+module's export table." Modules today: `KERNEL32`, `ntdll`, `USER32`,
+`ADVAPI32` (in-memory registry), `SHELL32`, `ole32`, `comdlg32`, `gdi32`,
+`ws2_32`, `version`, `WINMM`.
 
 ## Conventions
 

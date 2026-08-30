@@ -33,7 +33,7 @@ Requires a C11 compiler (GCC or Clang), GNU Make (or CMake), and `ar`.
 
 ```sh
 make            # build the `cellar` CLI + libcellar.a
-make test       # build and run the unit tests (loader/audio/perf/compat/kit)
+make test       # build and run the unit tests (loader/audio/perf/compat/kit/ecosystem)
 make sample     # generate a synthetic test PE -> samples/hello.exe
 make fuzz       # run a deterministic loader fuzz campaign
 make ALSA=1     # also build the real ALSA audio backend (needs libasound2-dev)
@@ -83,7 +83,15 @@ $ ./build/cellar samples/hello.exe
 `make sample` synthesizes a real, loadable PE without MinGW — handy for exercising the loader on a machine with no Windows toolchain. You can also point `cellar` at any genuine `.exe`.
 
 ```sh
-cellar analyze program.exe       # Application Compatibility Analysis (flagship)
+cellar inspect program.exe       # Application Inspector (arch, DLLs, TLS, runtimes)
+cellar analyze program.exe       # Application Compatibility Analysis
+cellar db list | db show APP     # compatibility database
+cellar prefix create Game        # isolated Windows environment (bottle)
+cellar prefix launch Game game.exe
+cellar prefix backup|restore|delete Game
+cellar runtime list|install vcruntime|dotnet|directx|fonts|systemlibs
+cellar test                      # compatibility test lab
+cellar debug program.exe         # debugger snapshot
 cellar program.exe               # load + report a Windows executable
 cellar --list-modules            # show registered Win32 modules & exports
 cellar --platform                # OS / perf-hint info
@@ -125,6 +133,43 @@ Shader cache: ENABLED
 ```
 
 The analyzer drives several advanced features described below.
+
+## Five major systems
+
+These are the pieces that push Cellar past "parse a PE" toward a project that
+can actually host Windows applications:
+
+1. **Application Inspector** (`cellar inspect game.exe`) — PE architecture,
+   imported DLLs and APIs, TLS, resources, manifests, COM/CLR, delay-loads,
+   .NET and VC-runtime requirements, detected graphics/audio/input/net.
+2. **Compatibility database** (`cellar db`) — remembers what each application
+   needs and how well Cellar covers it (HIGH / MEDIUM / LOW + known issues).
+   Inspector and analyzer results are stored automatically.
+3. **Prefix / environment manager** (`cellar prefix`) — isolated bottles with
+   their own `drive_c`, registry journal, Windows-version behavior, and
+   graphics/audio settings. `%APPDATA%` / `%WINDIR%` / `%TEMP%` / … map into
+   the bottle.
+4. **Compatibility test lab** (`cellar test`) — Windows-behavior tests
+   (kernel32, user32, ntdll, advapi32, COM, locale, security, …) plus one
+   auto-generated test per registered Win32 export. Output looks like:
+
+   ```
+   Tests:       76
+   Passed:      76
+   Failed:         0
+   Skipped:        0
+   Compatibility: 100.0%
+   ```
+5. **COM/OLE + Windows shell** — IUnknown, GUIDs, refcounting, class
+   registration, STA/MTA apartments, same-process marshaling; `SHGetFolderPathA`
+   / `ShellExecuteA`; desktop shortcuts, MIME associations, clipboard, and
+   notifications.
+
+Around those: a **runtime manager** (VC++ / .NET / DirectX / fonts / system
+libs), a **virtual display** (multi-monitor, DPI, HDR, orientation), a
+**security model** (SIDs, tokens, ACLs → Linux uids), an **installer journal**,
+**user-space services**, **locale/code pages**, **printing**, **devices**, and
+an **accessibility tree**.
 
 ## Audio
 
@@ -193,7 +238,9 @@ Cellar ships a performance kit aimed at game-like Windows workloads:
 - **Section mapping** — assembles a section-aligned virtual image so RVA lookups and the entry point behave as on Windows.
 - **Import resolution** — walks each DLL's import table and binds thunks to Cellar's native Win32 functions via an O(1) export registry.
 - **Export indexing** — parses a module's export directory into a name index.
-- **Win32 registry** — `KERNEL32.dll` (`ExitProcess`, `GetStdHandle`, `WriteFile`, `LoadLibraryA`, `GetProcAddress`, …) and `WINMM.dll` (multimedia/audio) modules.
+- **Win32 registry** — independent modules for `KERNEL32.dll`, `ntdll.dll`,
+  `USER32.dll`, `ADVAPI32.dll`, `SHELL32.dll`, `ole32.dll`, `comdlg32.dll`,
+  `gdi32.dll`, `ws2_32.dll`, `version.dll`, and `WINMM.dll`.
 - **Portability layer** — one POSIX implementation serves Linux and Android (clocks, sleep, mmap reads, pid/tid).
 - **Audio subsystem** — backend dispatch with a testable WAV sink and optional ALSA.
 - **Performance kit** — counters, tunables, tracing, pre-faulting, zero-copy mmap loads.
@@ -206,7 +253,11 @@ Cellar ships a performance kit aimed at game-like Windows workloads:
 - **Dynamic tracing** — `--trace=...` categories, zero overhead when off.
 - **Crash diagnostics** — structured EXCEPTION capture on fatal signals.
 - **Plugins & backend selection** — Vulkan→OpenGL→Software / ALSA→PipeWire→WAV hot-selection, `.so` plugin loading.
-- **Testing** — 5 unit suites plus a deterministic loader fuzz harness (`make fuzz`), all clean under ASan/UBSan.
+- **Testing** — 6 unit suites plus a deterministic loader fuzz harness (`make fuzz`) and `cellar test` (compatibility lab), all clean under ASan/UBSan.
+- **Inspector + compatibility DB** — `cellar inspect` / `cellar db`.
+- **Prefix manager** — create / backup / restore / delete isolated bottles.
+- **COM / OLE** — IUnknown, GUIDs, apartments, class registration.
+- **Shell / desktop / display / security / locale / print / devices / a11y.**
 
 ## Layout
 
@@ -227,6 +278,24 @@ include/cellar/          public headers
   shadercache.h          persistent shader pipeline cache
   plugin.h               plugin architecture + backend hot-selection
   crash.h                crash-recovery diagnostics
+  inspect.h              application inspector
+  db.h                   compatibility database
+  runtime.h              runtime (VC++/.NET/DirectX/fonts) manager
+  shell.h                %APPDATA% / %WINDIR% / … mapping
+  prefix.h               bottle create/backup/restore/delete
+  display.h              virtual multi-monitor display
+  security.h             SIDs, tokens, ACLs
+  desktop.h              .desktop, MIME, clipboard, notifications
+  installer.h            installer side-effect journal
+  com.h                  COM/OLE (IUnknown, GUIDs, apartments)
+  service.h              user-space Windows service manager
+  notify.h               notification history
+  a11y.h                 accessibility tree
+  locale.h               code pages + date/number format
+  print.h                virtual printers
+  device.h               device registry
+  debug.h                compatibility debugger snapshot
+  testlab.h              compatibility test lab
 src/
   loader/
     cellar_util.c        status strings, logging, endian reads, hashing
@@ -261,6 +330,24 @@ src/
     plugin.c             backend registry + plugin loading
   crash/
     crash.c              crash diagnostics + signal handler
+  inspect/inspect.c      application inspector
+  db/db.c                compatibility database
+  runtime/runtime.c      runtime manager
+  shell/shell.c          Windows env-var mapping
+  prefix/prefix.c        bottle manager
+  display/display.c      virtual display
+  security/security.c    security model
+  desktop/desktop.c      Linux desktop integration
+  installer/installer.c  installer journal
+  com/com.c              COM/OLE
+  service/service.c      user-space services
+  notify/notify.c        notifications
+  a11y/a11y.c            accessibility tree
+  locale/locale.c        locale + code pages
+  print/print.c          printing
+  device/device.c        devices
+  debug/debug.c          debugger snapshot
+  testlab/testlab.c      compatibility test lab
   cli.c                  command-line driver
 tests/
   test_loader.c          loader unit tests (synthetic-PE driven)
@@ -268,6 +355,7 @@ tests/
   test_perf.c            perf counters / ring / tunables tests
   test_compat.c          analyzer + version profiles + app profiles + crash
   test_kit.c             timer, sync, shmem, trace, shadercache tests
+  test_ecosystem.c       inspector, db, prefix, COM, test lab
 tools/
   gen_sample_pe.c        writes a minimal valid PE for testing
   fuzz_loader.c          deterministic PE-loader fuzz harness

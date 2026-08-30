@@ -84,7 +84,6 @@ static void test_analysis(void)
     cellar_image_t img;
     cellar_analysis_t a;
     cellar_status_t st;
-    int i;
 
     CHECK(build_pe(&pe, "KERNEL32.dll", "ExitProcess",
                    "USER32.dll", "MessageBoxA"), "build pe");
@@ -96,19 +95,14 @@ static void test_analysis(void)
     st = cellar_compat_analyze(&img, "game.exe", &a);
     CHECK(st == CELLAR_OK, "analyze ok");
     CHECK(a.is_64bit == 0, "x86 detected");
-    CHECK(a.missing_count == 1, "one missing API (user32!MessageBoxA)");
+    CHECK(a.missing_count == 0, "USER32.MessageBoxA is implemented");
     CHECK(a.scores[CELLAR_CAT_SYSTEM].total_imports == 2,
           "both imports classified into Windows-API category");
-    CHECK(a.scores[CELLAR_CAT_SYSTEM].supported_imports == 1,
-          "ExitProcess supported, MessageBoxA not");
-    CHECK(a.scores[CELLAR_CAT_SYSTEM].percent == 50,
-          "Windows-API coverage 50%");
-    CHECK(a.overall_percent == 50, "overall 50%");
-    CHECK(a.missing[0].called_by[0] != '\0', "called_by recorded");
-
-    /* Verify the missing-API diagnostic has all fields. */
-    CHECK(strstr(a.missing[0].recommendation, "USER32.dll") != NULL,
-          "recommendation mentions the module");
+    CHECK(a.scores[CELLAR_CAT_SYSTEM].supported_imports == 2,
+          "ExitProcess and MessageBoxA both supported");
+    CHECK(a.scores[CELLAR_CAT_SYSTEM].percent == 100,
+          "Windows-API coverage 100%");
+    CHECK(a.overall_percent == 100, "overall 100%");
 
     /* Report renderer must not crash and must mention the exe. */
     cellar_compat_report(&a);
