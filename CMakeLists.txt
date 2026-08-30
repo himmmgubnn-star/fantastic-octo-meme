@@ -58,6 +58,7 @@ set(CELLAR_LIB_SOURCES
   src/device/device.c
   src/debug/debug.c
   src/testlab/testlab.c
+  src/workspace/workspace.c
 )
 if(CELLAR_AUDIO_ALSA)
   list(APPEND CELLAR_LIB_SOURCES src/audio/alsa.c)
@@ -97,6 +98,7 @@ set(CELLAR_LIB_HEADERS
   include/cellar/device.h
   include/cellar/debug.h
   include/cellar/testlab.h
+  include/cellar/workspace.h
 )
 
 add_library(cellar STATIC ${CELLAR_LIB_SOURCES} ${CELLAR_LIB_HEADERS})
@@ -113,7 +115,7 @@ add_executable(cellar-cli src/cli.c)
 target_link_libraries(cellar-cli PRIVATE cellar)
 
 enable_testing()
-foreach(t loader audio perf compat kit ecosystem)
+foreach(t loader audio perf compat kit ecosystem workspace)
   add_executable(test_${t} tests/test_${t}.c)
   target_link_libraries(test_${t} PRIVATE cellar)
   add_test(NAME ${t} COMMAND test_${t})
