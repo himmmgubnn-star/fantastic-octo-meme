@@ -102,11 +102,20 @@ static airlock_status_t read_file_perf(const char *path, uint8_t **out,
 
 /* ---- Section mapping ----------------------------------------------------- */
 
+/*
+ * SizeOfImage comes from the file and is used directly as an allocation size,
+ * so it must be bounded before it is trusted. Without a ceiling, a few mutated
+ * bytes turn into a multi-gigabyte allocation and a trivially reachable
+ * out-of-memory condition. No real PE image approaches this.
+ */
+#define AIRLOCK_MAX_IMAGE_SIZE ((size_t)2 * 1024 * 1024 * 1024)
+
 static airlock_status_t map_sections(airlock_image_t *img)
 {
     size_t i;
 
-    if (img->opt.size_of_image == 0)
+    if (img->opt.size_of_image == 0 ||
+        img->opt.size_of_image > AIRLOCK_MAX_IMAGE_SIZE)
         return AIRLOCK_ERR_PE_BAD_SECTIONS;
 
     img->mapped_size = img->opt.size_of_image;
@@ -125,6 +134,8 @@ static airlock_status_t map_sections(airlock_image_t *img)
         airlock_section_view_t *s = &img->sections[i];
         if (s->raw_size == 0 || s->raw_offset >= img->raw_size)
             continue;
+        if ((uint64_t)s->raw_offset + s->raw_size > img->raw_size)
+            continue; /* source would read past the end of the file */
         if ((uint64_t)s->virtual_address + s->raw_size > img->mapped_size)
             continue; /* malformed; skip to stay safe */
         memcpy(img->mapped + s->virtual_address,
@@ -155,16 +166,25 @@ static size_t thunk_size(const airlock_image_t *img)
 static bool read_thunk(const airlock_image_t *img, uint32_t rva,
                        uint64_t *value, bool *ordinal)
 {
-    uint8_t *p = airlock_image_rva(img, rva);
-    if (!p)
-        return false;
-
+    /*
+     * Read through the bounds-checked accessor rather than dereferencing the
+     * resolved pointer: a thunk sitting in the last bytes of the image would
+     * otherwise read past the end of the mapping.
+     */
     if (img->opt.magic == AIRLOCK_PE_MAGIC_PE32) {
-        uint32_t v = airlock_le32(p);
+        uint32_t le;
+        uint32_t v;
+        if (!airlock_image_read(img, rva, &le, sizeof le))
+            return false;
+        v = airlock_le32((const uint8_t *)&le);
         *ordinal = (v & 0x80000000u) != 0;
         *value = v & 0x7FFFFFFFu;
     } else {
-        uint64_t v = airlock_le64(p);
+        uint64_t le;
+        uint64_t v;
+        if (!airlock_image_read(img, rva, &le, sizeof le))
+            return false;
+        v = airlock_le64((const uint8_t *)&le);
         *ordinal = (v & 0x8000000000000000ull) != 0;
         *value = v & 0x7FFFFFFFFFFFFFFFull;
     }

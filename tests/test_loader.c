@@ -241,6 +241,81 @@ static void test_negative_cases(void)
     CHECK(st == AIRLOCK_ERR_INVALID_ARGUMENT, "NULL buffer rejected");
 }
 
+/*
+ * Malformed-header regression tests.
+ *
+ * Each case below was found by running tools/fuzz_loader.c under
+ * AddressSanitizer and produced an out-of-bounds read or a multi-gigabyte
+ * allocation. They are pinned here so the bounds cannot silently regress.
+ */
+static void test_malformed_headers(void)
+{
+    struct pe_buf b;
+    size_t len, section_off;
+    airlock_image_t img;
+    airlock_status_t st;
+    uint8_t scratch[16];
+
+    section_off = OFF_OPT + sizeof(airlock_pe_optional_header_t);
+
+    /* --- A. Section raw range runs past the end of the file. --------------
+     * raw_offset 0x200 + raw_size 0x1000 = 0x1200, but the buffer is only
+     * 0x700 bytes. The destination fits inside the image, so only a source
+     * bound catches this. */
+    len = build_test_pe(&b);
+    CHECK(len > 0, "malformed A: built PE");
+    bput32(&b, section_off + 16, 0x1000); /* size_of_raw_data */
+    st = airlock_image_load_buffer(b.p, len, AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_OK, "malformed A: loads with a typed status");
+    if (st == AIRLOCK_OK) {
+        CHECK(img.section_count == 1, "malformed A: one section parsed");
+        CHECK(img.sections[0].mapped == NULL,
+              "malformed A: section with an out-of-file raw range is skipped");
+        airlock_image_unload(&img);
+    }
+    free(b.p);
+
+    /* --- B. SizeOfHeaders larger than the mapped image. -------------------
+     * An RVA inside the bogus header range must not resolve past the mapping. */
+    len = build_test_pe(&b);
+    bput32(&b, OFF_OPT + 0x40, 0x4000);   /* size_of_headers  (image is 0x2000) */
+    st = airlock_image_load_buffer(b.p, len, AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_OK, "malformed B: loads with a typed status");
+    if (st == AIRLOCK_OK) {
+        CHECK(airlock_image_rva(&img, 0x3000) == NULL,
+              "malformed B: RVA past the mapping does not resolve");
+        CHECK(!airlock_image_read(&img, 0x3000, scratch, sizeof scratch),
+              "malformed B: read past the mapping is refused");
+        CHECK(airlock_image_rva(&img, 0x100) != NULL,
+              "malformed B: RVA inside the real image still resolves");
+        airlock_image_unload(&img);
+    }
+    free(b.p);
+
+    /* --- C. Absurd SizeOfImage. -------------------------------------------
+     * Must be rejected as malformed rather than used as an allocation size. */
+    len = build_test_pe(&b);
+    bput32(&b, OFF_OPT + 0x3C, 0xFFFFFFFFu); /* size_of_image */
+    st = airlock_image_load_buffer(b.p, len, AIRLOCK_LOAD_DEFAULT, &img);
+    CHECK(st == AIRLOCK_ERR_PE_BAD_SECTIONS,
+          "malformed C: absurd SizeOfImage is rejected, not allocated");
+    free(b.p);
+
+    /* --- D. SizeOfHeaders larger than the file, raw RVA path. ------------- */
+    len = build_test_pe(&b);
+    bput32(&b, OFF_OPT + 0x40, 0x4000);   /* size_of_headers (file is 0x700) */
+    st = airlock_image_load_buffer(b.p, len, (enum airlock_load_flags)0, &img);
+    CHECK(st == AIRLOCK_OK, "malformed D: loads with a typed status");
+    if (st == AIRLOCK_OK) {
+        CHECK(airlock_image_rva_raw(&img, 0x1000) == NULL,
+              "malformed D: raw RVA past the file does not resolve");
+        CHECK(airlock_image_rva_raw(&img, 0x100) != NULL,
+              "malformed D: raw RVA inside the file still resolves");
+        airlock_image_unload(&img);
+    }
+    free(b.p);
+}
+
 static void test_status_strings(void)
 {
     CHECK(strcmp(airlock_status_string(AIRLOCK_OK), "ok") == 0,
@@ -258,6 +333,7 @@ int main(void)
 
     test_load_and_resolve();
     test_negative_cases();
+    test_malformed_headers();
     test_status_strings();
 
     if (g_failures == 0) {

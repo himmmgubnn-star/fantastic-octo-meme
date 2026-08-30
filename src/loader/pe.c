@@ -124,6 +124,14 @@ uint8_t *airlock_image_rva(const airlock_image_t *img, uint32_t rva)
     long idx;
     if (!img || !img->mapped)
         return NULL;
+    /*
+     * The pointer must stay inside the mapped image no matter what the file
+     * claims. SizeOfHeaders and the section table both come from the input and
+     * can describe a range far larger than the allocation, so bound the RVA
+     * against mapped_size first.
+     */
+    if (rva >= img->mapped_size)
+        return NULL;
     if (rva < img->opt.size_of_headers)
         return img->mapped + rva;
 
@@ -139,6 +147,10 @@ const uint8_t *airlock_image_rva_raw(const airlock_image_t *img, uint32_t rva)
     if (!img || !img->raw)
         return NULL;
 
+    /* Bound against the bytes we actually hold, not against what the headers
+     * claim: a mutated SizeOfHeaders can exceed the file length. */
+    if (rva >= img->raw_size)
+        return NULL;
     if (rva < img->opt.size_of_headers)
         return (uint8_t *)(uintptr_t)(img->raw + rva);
 
@@ -149,7 +161,8 @@ const uint8_t *airlock_image_rva_raw(const airlock_image_t *img, uint32_t rva)
     {
         const airlock_section_view_t *s = &img->sections[idx];
         uint32_t delta = rva - s->virtual_address;
-        if (delta < s->raw_size)
+        if (delta < s->raw_size &&
+            (uint64_t)s->raw_offset + delta < img->raw_size)
             return img->raw + s->raw_offset + delta;
     }
     return NULL;
