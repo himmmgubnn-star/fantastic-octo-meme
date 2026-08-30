@@ -78,7 +78,8 @@ LIB_SRCS = \
 	src/print/print.c \
 	src/device/device.c \
 	src/debug/debug.c \
-	src/testlab/testlab.c
+	src/testlab/testlab.c \
+	src/workspace/workspace.c
 
 # Optional ALSA backend for real audio on desktop Linux:
 #   make ALSA=1            (requires libasound2-dev)
@@ -90,7 +91,7 @@ LDLIBS   := $(if $(ALSA),-lasound)
 LDLIBS   += -ldl
 
 LIB_OBJS = $(patsubst src/%.c,$(BUILD)/obj/%.o,$(LIB_SRCS))
-TEST_BINS = test_loader test_audio test_perf test_compat test_kit test_ecosystem
+TEST_BINS = test_loader test_audio test_perf test_compat test_kit test_ecosystem test_workspace
 GEN       = $(BUILD)/gen_sample_pe
 FUZZ      = $(BUILD)/fuzz_loader
 SAMPLE    = samples/hello.exe
@@ -118,6 +119,8 @@ $(BUILD)/test_kit: tests/test_kit.c $(LIB)
 	$(CC) $(CFLAGS) tests/test_kit.c $(LIB) $(LDLIBS) -o $@
 $(BUILD)/test_ecosystem: tests/test_ecosystem.c $(LIB)
 	$(CC) $(CFLAGS) tests/test_ecosystem.c $(LIB) $(LDLIBS) -o $@
+$(BUILD)/test_workspace: tests/test_workspace.c $(LIB)
+	$(CC) $(CFLAGS) tests/test_workspace.c $(LIB) $(LDLIBS) -o $@
 
 $(GEN): tools/gen_sample_pe.c
 	@mkdir -p $(dir $@)

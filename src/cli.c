@@ -23,6 +23,8 @@
 #include "cellar/crash.h"
 #include "cellar/db.h"
 #include "cellar/debug.h"
+#include "cellar/desktop.h"
+#include "cellar/device.h"
 #include "cellar/inspect.h"
 #include "cellar/loader.h"
 #include "cellar/pe.h"
@@ -31,9 +33,11 @@
 #include "cellar/platform.h"
 #include "cellar/prefix.h"
 #include "cellar/runtime.h"
+#include "cellar/shadercache.h"
 #include "cellar/testlab.h"
 #include "cellar/trace.h"
 #include "cellar/win32.h"
+#include "cellar/workspace.h"
 
 static int remember_in_db(const cellar_inspect_t *ins, const cellar_analysis_t *a);
 static int cmd_inspect(const char *path);
@@ -393,7 +397,8 @@ static int cmd_prefix(int argc, char **argv)
     const char *root = cellar_prefix_dir();
     const char *sub;
     if (argc < 3) {
-        fprintf(stderr, "cellar: prefix needs create|list|info|delete|backup|restore|launch\n");
+        fprintf(stderr, "cellar: prefix needs create|list|info|delete|clone|"
+                        "import|export|set|settings|backup|restore|launch\n");
         return 1;
     }
     sub = argv[2];
@@ -403,8 +408,9 @@ static int cmd_prefix(int argc, char **argv)
         size_t i;
         printf("Prefixes in %s (%zu):\n", root, n);
         for (i = 0; i < n; i++)
-            printf("  %-16s  %s  gfx=%s audio=%s\n",
-                   list[i].name, list[i].path, list[i].gfx, list[i].audio);
+            printf("  %-16s  %s  gfx=%s audio=%s arch=%s runner=%s\n",
+                   list[i].name, list[i].path, list[i].gfx, list[i].audio,
+                   list[i].arch, list[i].runner);
         return 0;
     }
     if (argc < 4) {
@@ -412,11 +418,80 @@ static int cmd_prefix(int argc, char **argv)
         return 1;
     }
     if (strcmp(sub, "create") == 0) {
-        if (cellar_prefix_create(root, argv[3]) != CELLAR_OK) {
+        const char *arch = NULL;
+        if (argc > 4) {
+            if (strncmp(argv[4], "--arch=", 7) == 0)
+                arch = argv[4] + 7;
+            else if (strcmp(argv[4], "--arch") == 0 && argc > 5)
+                arch = argv[5];
+        }
+        if (cellar_prefix_create_arch(root, argv[3], arch) != CELLAR_OK) {
             fprintf(stderr, "cellar: failed to create prefix '%s'\n", argv[3]);
             return 1;
         }
-        printf("created prefix %s/%s\n", root, argv[3]);
+        printf("created prefix %s/%s (arch=%s)\n", root, argv[3],
+               arch ? arch : "win64");
+        return 0;
+    }
+    if (strcmp(sub, "clone") == 0) {
+        const char *dst = argc > 4 ? argv[4] : NULL;
+        if (!dst) {
+            fprintf(stderr, "cellar: prefix clone SRC DST\n");
+            return 1;
+        }
+        if (cellar_prefix_clone(root, argv[3], dst) != CELLAR_OK)
+            return 1;
+        printf("cloned %s -> %s\n", argv[3], dst);
+        return 0;
+    }
+    if (strcmp(sub, "import") == 0) {
+        const char *file = argc > 4 ? argv[4] : NULL;
+        if (!file) {
+            fprintf(stderr, "cellar: prefix import NAME FILE\n");
+            return 1;
+        }
+        if (cellar_prefix_import(root, argv[3], file) != CELLAR_OK)
+            return 1;
+        printf("imported %s from %s\n", argv[3], file);
+        return 0;
+    }
+    if (strcmp(sub, "export") == 0) {
+        const char *file = argc > 4 ? argv[4] : NULL;
+        if (!file) {
+            fprintf(stderr, "cellar: prefix export NAME FILE\n");
+            return 1;
+        }
+        if (cellar_prefix_export(root, argv[3], file) != CELLAR_OK)
+            return 1;
+        printf("exported %s -> %s\n", argv[3], file);
+        return 0;
+    }
+    if (strcmp(sub, "set") == 0) {
+        const char *key, *val;
+        if (argc < 6) {
+            fprintf(stderr, "cellar: prefix set NAME KEY VALUE\n");
+            return 1;
+        }
+        key = argv[4];
+        val = argv[5];
+        if (cellar_prefix_set_setting(root, argv[3], key, val) != CELLAR_OK)
+            return 1;
+        printf("%s.%s=%s\n", argv[3], key, val);
+        return 0;
+    }
+    if (strcmp(sub, "settings") == 0) {
+        const char *keys[16] = { "version_mode", "gfx", "audio", "arch",
+                                 "runner", "resolution", "virtual_desktop",
+                                 "vd_width", "vd_height", "vd_dpi", "box64",
+                                 "cpu_core_limit", "frame_cap", "esync",
+                                 "fsync", "dll_overrides" };
+        size_t i;
+        for (i = 0; i < sizeof keys / sizeof keys[0]; i++) {
+            char v[256];
+            if (cellar_prefix_get_setting(root, argv[3], keys[i], v,
+                                          sizeof v) == CELLAR_OK)
+                printf("%s=%s\n", keys[i], v);
+        }
         return 0;
     }
     if (strcmp(sub, "delete") == 0) {
@@ -436,6 +511,8 @@ static int cmd_prefix(int argc, char **argv)
         printf("Version:  %s\n", cellar_version_profile(info.version_mode)->name);
         printf("Graphics: %s\n", info.gfx);
         printf("Audio:    %s\n", info.audio);
+        printf("Arch:     %s\n", info.arch);
+        printf("Runner:   %s\n", info.runner);
         return 0;
     }
     if (strcmp(sub, "backup") == 0) {
@@ -486,6 +563,455 @@ static int cmd_prefix(int argc, char **argv)
         return 0;
     }
     fprintf(stderr, "cellar: unknown prefix subcommand '%s'\n", sub);
+    return 1;
+}
+
+static cellar_setup_kind_t setup_from_name(const char *s)
+{
+    if (!s)
+        return CELLAR_SETUP_EXE;
+    if (strcmp(s, "msi") == 0 || strcmp(s, "install-msi") == 0)
+        return CELLAR_SETUP_MSI;
+    if (strcmp(s, "import") == 0 || strcmp(s, "import-prefix") == 0)
+        return CELLAR_SETUP_IMPORT;
+    if (strcmp(s, "portable") == 0 || strcmp(s, "add-portable") == 0)
+        return CELLAR_SETUP_PORTABLE;
+    return CELLAR_SETUP_EXE;
+}
+
+static int print_workspace(const cellar_workspace_t *w)
+{
+    printf("Name:          %s\n", w->name);
+    printf("Path:          %s\n", w->path);
+    printf("Setup:         %s\n", w->setup_label);
+    printf("Source:        %s\n", w->source[0] ? w->source : "(none)");
+    printf("Executable:    %s\n", w->executable[0] ? w->executable : "(unset)");
+    printf("Architecture:  %s\n", w->architecture[0] ? w->architecture : "?");
+    printf("Runner:        %s\n", w->runner[0] ? w->runner : "?");
+    printf("Windows:       %s\n", cellar_version_profile(w->windows_version)->name);
+    printf("Graphics:      %s\n", w->gfx_backend[0] ? w->gfx_backend : "Auto");
+    printf("Audio:         %s\n", w->audio_backend[0] ? w->audio_backend : "Auto");
+    printf("DLL overrides: %s\n", w->dll_overrides[0] ? w->dll_overrides : "(none)");
+    printf("Dependencies:  %s\n", w->dependencies[0] ? w->dependencies : "(none)");
+    printf("Tags:          %s\n", w->tags[0] ? w->tags : "(none)");
+    printf("Perf mode:     %s\n", cellar_perf_mode_name(w->perf_mode));
+    printf("Resolution:    %ux%u @%u DPI%s\n", w->resolution_width,
+           w->resolution_height, w->dpi, w->virtual_desktop ? " virtual" : "");
+    printf("Hash:          %s\n", w->exe_hash[0] ? w->exe_hash : "(none)");
+    printf("Rating:        %s\n", w->compat_rating[0] ? w->compat_rating : "UNKNOWN");
+    printf("Size:          %llu bytes%s\n",
+           (unsigned long long)w->install_size, w->favorite ? "  [favorite]" : "");
+    printf("Shortcut:      %s\n", w->has_shortcut ? "yes" : "no");
+    printf("Sandbox:       %s\n", w->sandbox_enabled ? "enabled" : "disabled");
+    {
+        char perms[512];
+        cellar_workspace_permissions_text(w->permissions, perms, sizeof perms);
+        printf("Permissions:   %s\n", perms);
+    }
+    printf("Controls:      %s\n", w->controls[0] ? w->controls : "default");
+    return 0;
+}
+
+static int cmd_profile(int argc, char **argv);
+
+static int cmd_app(int argc, char **argv)
+{
+    const char *root = cellar_workspace_root();
+    const char *sub;
+    if (argc < 3) {
+        fprintf(stderr, "cellar: app needs add|list|show|remove|set|permissions|"
+                        "perf|controls|resolution|doctor|snapshot|rollback|diff|"
+                        "repair|support|diagnose|safety|shader|deps|run|profile\n");
+        return 1;
+    }
+    sub = argv[2];
+
+    if (strcmp(sub, "add") == 0 || strcmp(sub, "new") == 0) {
+        const char *name, *source = NULL, *launch = NULL;
+        cellar_setup_kind_t kind = CELLAR_SETUP_EXE;
+        int i;
+        cellar_workspace_t w;
+        if (argc < 4) {
+            fprintf(stderr, "cellar: app add NAME [SOURCE] [--kind exe|msi|import|portable] [--launch EXE]\n");
+            return 1;
+        }
+        name = argv[3];
+        for (i = 4; i < argc; i++) {
+            if (strcmp(argv[i], "--kind") == 0 && i + 1 < argc) {
+                kind = setup_from_name(argv[++i]);
+            } else if (strcmp(argv[i], "--launch") == 0 && i + 1 < argc) {
+                launch = argv[++i];
+            } else if (!source) {
+                source = argv[i];
+            }
+        }
+        if (cellar_workspace_install(root, name, kind, source, launch, &w) != CELLAR_OK) {
+            fprintf(stderr, "cellar: failed to add workspace '%s'\n", name);
+            return 1;
+        }
+        printf("Added workspace %s (kind=%s, id=%s)\n", name,
+               cellar_setup_kind_name(kind), w.id);
+        return 0;
+    }
+
+    if (strcmp(sub, "list") == 0) {
+        cellar_workspace_t ws[64];
+        size_t n = cellar_workspace_list(root, ws, 64);
+        size_t i;
+        printf("Winaltor workspaces in %s (%zu):\n", root, n);
+        for (i = 0; i < n; i++) {
+            printf("  %-20s %s  %s  %s%s  (%llu bytes)\n",
+                   ws[i].name, ws[i].setup_label, ws[i].architecture,
+                   ws[i].gfx_backend[0] ? ws[i].gfx_backend : "Auto",
+                   ws[i].favorite ? " *" : "",
+                   (unsigned long long)ws[i].install_size);
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "diagnose") == 0) {
+        char buf[4096];
+        if (argc < 4) {
+            fprintf(stderr, "cellar: app diagnose LOGFILE\n");
+            return 1;
+        }
+        if (cellar_workspace_diagnose(argv[3], buf, sizeof buf) != CELLAR_OK)
+            return 1;
+        printf("%s", buf);
+        return 0;
+    }
+
+    if (argc < 4) {
+        fprintf(stderr, "cellar: app %s needs a workspace name\n", sub);
+        return 1;
+    }
+
+    if (strcmp(sub, "show") == 0) {
+        cellar_workspace_t w;
+        if (cellar_workspace_load(root, argv[3], &w) != CELLAR_OK) {
+            fprintf(stderr, "cellar: workspace '%s' not found\n", argv[3]);
+            return 1;
+        }
+        print_workspace(&w);
+        return 0;
+    }
+
+    if (strcmp(sub, "remove") == 0 || strcmp(sub, "rm") == 0) {
+        if (cellar_workspace_remove(root, argv[3]) != CELLAR_OK)
+            return 1;
+        printf("Removed workspace %s\n", argv[3]);
+        return 0;
+    }
+
+    if (strcmp(sub, "set") == 0) {
+        if (argc < 6) {
+            fprintf(stderr, "cellar: app set NAME KEY VALUE\n");
+            return 1;
+        }
+        if (cellar_workspace_set(root, argv[3], argv[4], argv[5]) != CELLAR_OK) {
+            fprintf(stderr, "cellar: cannot set %s\n", argv[4]);
+            return 1;
+        }
+        printf("Set %s=%s for %s\n", argv[4], argv[5], argv[3]);
+        return 0;
+    }
+
+    if (strcmp(sub, "permissions") == 0) {
+        cellar_workspace_t w;
+        if (argc >= 5) {
+            uint32_t perms = (uint32_t)strtoul(argv[4], NULL, 0);
+            if (cellar_workspace_set_permissions(root, argv[3], perms) != CELLAR_OK)
+                return 1;
+            printf("Set permissions to 0x%x\n", (unsigned)perms);
+        } else {
+            if (cellar_workspace_load(root, argv[3], &w) != CELLAR_OK)
+                return 1;
+            {
+                char p[512];
+                cellar_workspace_permissions_text(w.permissions, p, sizeof p);
+                printf("%s\n", p);
+            }
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "perf") == 0) {
+        cellar_workspace_t w;
+        if (argc >= 5) {
+            size_t i;
+            for (i = 0; i < (size_t)CELLAR_PERF_MODE_COUNT; i++)
+                if (strcmp(cellar_perf_mode_name((cellar_perf_mode_t)i), argv[4]) == 0) {
+                    if (cellar_workspace_set_perf_mode(root, argv[3],
+                                                       (cellar_perf_mode_t)i) != CELLAR_OK)
+                        return 1;
+                    printf("Set perf mode %s\n", argv[4]);
+                    return 0;
+                }
+            fprintf(stderr, "cellar: unknown perf mode '%s'\n", argv[4]);
+            return 1;
+        } else {
+            if (cellar_workspace_load(root, argv[3], &w) != CELLAR_OK)
+                return 1;
+            printf("%s\n", cellar_perf_mode_name(w.perf_mode));
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "controls") == 0) {
+        if (argc >= 5) {
+            char controls[1024];
+            int i;
+            controls[0] = '\0';
+            for (i = 4; i < argc; i++) {
+                if (i > 4)
+                    cellar_strlcat(controls, sizeof controls, " ");
+                cellar_strlcat(controls, sizeof controls, argv[i]);
+            }
+            if (cellar_workspace_set_controls(root, argv[3], controls) != CELLAR_OK)
+                return 1;
+            printf("Set controls for %s\n", argv[3]);
+        } else {
+            cellar_workspace_t w;
+            if (cellar_workspace_load(root, argv[3], &w) != CELLAR_OK)
+                return 1;
+            printf("%s\n", w.controls[0] ? w.controls : "default");
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "resolution") == 0) {
+        if (argc < 6) {
+            fprintf(stderr, "cellar: app resolution NAME WIDTH HEIGHT [DPI [VIRTUAL]]\n");
+            return 1;
+        }
+        {
+            uint32_t wd = (uint32_t)strtoul(argv[4], NULL, 0);
+            uint32_t ht = (uint32_t)strtoul(argv[5], NULL, 0);
+            uint32_t dpi = argc >= 7 ? (uint32_t)strtoul(argv[6], NULL, 0) : 96;
+            int virt = argc >= 8 ? atoi(argv[7]) : 0;
+            if (cellar_workspace_set_resolution(root, argv[3], wd, ht, dpi, virt) != CELLAR_OK)
+                return 1;
+            printf("Set resolution %ux%u @%u DPI%s\n", wd, ht, dpi, virt ? " virtual" : "");
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "doctor") == 0) {
+        cellar_doctor_report_t r;
+        if (cellar_workspace_doctor(root, argv[3], &r) != CELLAR_OK) {
+            fprintf(stderr, "cellar: doctor failed\n");
+            return 1;
+        }
+        cellar_doctor_report(&r);
+        return r.ready ? 0 : 1;
+    }
+
+    if (strcmp(sub, "snapshot") == 0) {
+        const char *label = argc >= 5 ? argv[4] : "default";
+        if (cellar_workspace_snapshot(root, argv[3], label) != CELLAR_OK)
+            return 1;
+        printf("Snapshotted %s as %s\n", argv[3], label);
+        return 0;
+    }
+
+    if (strcmp(sub, "rollback") == 0 || strcmp(sub, "restore") == 0) {
+        if (argc < 5) {
+            fprintf(stderr, "cellar: app rollback NAME LABEL\n");
+            return 1;
+        }
+        if (cellar_workspace_rollback(root, argv[3], argv[4]) != CELLAR_OK)
+            return 1;
+        printf("Rolled back %s to %s\n", argv[3], argv[4]);
+        return 0;
+    }
+
+    if (strcmp(sub, "diff") == 0) {
+        char diff[4096];
+        if (argc < 6) {
+            fprintf(stderr, "cellar: app diff NAME A B\n");
+            return 1;
+        }
+        {
+            int nd = cellar_workspace_profile_diff(root, argv[3], argv[4], argv[5],
+                                                   diff, sizeof diff);
+            if (nd < 0) {
+                fprintf(stderr, "cellar: cannot diff profiles\n");
+                return 1;
+            }
+            if (nd == 0)
+                printf("profiles are identical\n");
+            else
+                printf("%s", diff);
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "repair") == 0) {
+        if (cellar_workspace_repair(root, argv[3]) != CELLAR_OK)
+            return 1;
+        printf("Repaired %s\n", argv[3]);
+        return 0;
+    }
+
+    if (strcmp(sub, "support") == 0) {
+        const char *out = argc >= 5 ? argv[4] : NULL;
+        char path[640];
+        if (!out) {
+            snprintf(path, sizeof path, "%s/%s.support.txt", root, argv[3]);
+            out = path;
+        }
+        if (cellar_workspace_support(root, argv[3], out) != CELLAR_OK)
+            return 1;
+        printf("Wrote support bundle to %s\n", out);
+        return 0;
+    }
+
+    if (strcmp(sub, "safety") == 0) {
+        char buf[2048];
+        if (cellar_workspace_safety_report(root, argv[3], buf, sizeof buf) != CELLAR_OK)
+            return 1;
+        printf("%s", buf);
+        return 0;
+    }
+
+    if (strcmp(sub, "shader") == 0) {
+        if (argc >= 5 && strcmp(argv[4], "clear") == 0) {
+            if (cellar_workspace_shader_clear(root, argv[3]) != CELLAR_OK)
+                return 1;
+            printf("Cleared shader cache for %s\n", argv[3]);
+        } else {
+            printf("%llu bytes\n", (unsigned long long)cellar_workspace_shader_size(root, argv[3]));
+        }
+        return 0;
+    }
+
+    if (strcmp(sub, "deps") == 0) {
+        cellar_workspace_t w;
+        if (cellar_workspace_load(root, argv[3], &w) != CELLAR_OK)
+            return 1;
+        printf("%s\n", w.dependencies[0] ? w.dependencies : "(none)");
+        return 0;
+    }
+
+    if (strcmp(sub, "run") == 0) {
+        cellar_doctor_report_t r;
+        cellar_workspace_t w;
+        if (cellar_workspace_load(root, argv[3], &w) != CELLAR_OK) {
+            fprintf(stderr, "cellar: workspace '%s' not found\n", argv[3]);
+            return 1;
+        }
+        if (cellar_workspace_doctor(root, argv[3], &r) != CELLAR_OK)
+            return 1;
+        printf("== launching %s ==\n", argv[3]);
+        print_workspace(&w);
+        printf("\nLaunch doctor:\n");
+        cellar_doctor_report(&r);
+        if (!r.ready)
+            return 1;
+        printf("\nExecution of Windows binaries is not yet implemented "
+               "(see docs/ROADMAP.md, Milestone 1); this is a launch dry-run.\n");
+        return 0;
+    }
+
+    if (strcmp(sub, "profile") == 0) {
+        return cmd_profile(argc, argv);
+    }
+
+    fprintf(stderr, "cellar: unknown app subcommand '%s'\n", sub);
+    return 1;
+}
+
+static int cmd_device(int argc, char **argv)
+{
+    char buf[4096];
+    (void)argc;
+    if (argv[2] && strcmp(argv[2], "report") != 0) {
+        fprintf(stderr, "cellar: device subcommands: report\n");
+        return 1;
+    }
+    if (cellar_device_report(buf, sizeof buf) != CELLAR_OK)
+        return 1;
+    printf("%s", buf);
+    return 0;
+}
+
+static int cmd_container(int argc, char **argv)
+{
+    /* A container and a workspace are the same isolated environment. */
+    if (argc < 3) {
+        fprintf(stderr, "cellar: container needs create|list|show|remove\n");
+        return 1;
+    }
+    {
+        char *fake[32];
+        int n = 0;
+        int i;
+        fake[n++] = (char *)"app";   /* argv[0] (ignored)             */
+        fake[n++] = (char *)"container"; /* argv[1] (ignored)         */
+        fake[n++] = strcmp(argv[2], "create") == 0 ? (char *)"add" : argv[2];
+        for (i = 3; i < argc && n < 30; i++)
+            fake[n++] = argv[i];
+        fake[n] = NULL;              /* argv[argc] sentinel           */
+        return cmd_app(n, fake);
+    }
+}
+
+static int cmd_profile(int argc, char **argv)
+{
+    const char *root = cellar_workspace_root();
+    if (argc < 3) {
+        fprintf(stderr, "cellar: profile needs list|show|apply|export|import\n");
+        return 1;
+    }
+    if (strcmp(argv[2], "list") == 0 && argc >= 4) {
+        char labels[16][64];
+        size_t n = cellar_workspace_profile_list(root, argv[3], labels, 16);
+        size_t i;
+        printf("Profiles for %s (%zu):\n", argv[3], n);
+        for (i = 0; i < n; i++)
+            printf("  %s\n", labels[i]);
+        return 0;
+    }
+    if (strcmp(argv[2], "show") == 0 && argc >= 5) {
+        cellar_profile_point_t p;
+        if (cellar_workspace_profile_load(root, argv[3], argv[4], &p) != CELLAR_OK)
+            return 1;
+        printf("Label:        %s\n", p.label);
+        printf("Runner:       %s\n", p.runner);
+        printf("Architecture: %s\n", p.architecture);
+        printf("Windows:      %s\n", cellar_version_profile(p.windows_version)->name);
+        printf("Graphics:     %s\n", p.gfx_backend);
+        printf("Audio:        %s\n", p.audio_backend);
+        printf("Dependencies: %s\n", p.dependencies);
+        printf("DLL overrides:%s\n", p.dll_overrides);
+        printf("Resolution:   %s\n", p.resolution);
+        printf("Launch:       %s %s\n", p.launch_executable, p.launch_args);
+        printf("Trust:        %s\n", cellar_profile_trust_name(p.trust));
+        printf("Version:      %u\n", p.version);
+        return 0;
+    }
+    if (strcmp(argv[2], "apply") == 0 && argc >= 5) {
+        cellar_profile_point_t p;
+        if (cellar_workspace_profile_load(root, argv[3], argv[4], &p) != CELLAR_OK)
+            return 1;
+        if (cellar_workspace_profile_apply(root, argv[3], &p) != CELLAR_OK)
+            return 1;
+        printf("Applied %s to %s\n", argv[4], argv[3]);
+        return 0;
+    }
+    if (strcmp(argv[2], "export") == 0 && argc >= 5) {
+        if (cellar_workspace_profile_export(root, argv[3], argv[4]) != CELLAR_OK)
+            return 1;
+        printf("Exported %s profile to %s\n", argv[3], argv[4]);
+        return 0;
+    }
+    if (strcmp(argv[2], "import") == 0 && argc >= 5) {
+        if (cellar_workspace_profile_import(root, argv[3], argv[4]) != CELLAR_OK)
+            return 1;
+        printf("Imported %s into %s\n", argv[4], argv[3]);
+        return 0;
+    }
+    fprintf(stderr, "cellar: usage: profile list|show|apply|export|import NAME [LABEL/PATH]\n");
     return 1;
 }
 
@@ -544,8 +1070,15 @@ static void usage(FILE *out)
         "  cellar inspect game.exe       PE inspector (arch, DLLs, TLS, runtimes)\n"
         "  cellar analyze game.exe       application compatibility analysis\n"
         "  cellar db list|show APP       compatibility database\n"
-        "  cellar prefix create|list|info|delete|backup|restore|launch\n"
+        "  cellar prefix create|list|info|delete|clone|import|export\n"
+        "        |set|settings|backup|restore|launch\n"
         "  cellar runtime list|install|uninstall KIND\n"
+        "  cellar app add NAME [SRC] [--kind exe|msi|import|portable]\n"
+        "  cellar app list|show|remove|set|run|doctor|repair NAME ...\n"
+        "  cellar app snapshot|rollback|diff|support|safety|shader NAME ...\n"
+        "  cellar profile list|show|apply|export|import NAME [LABEL|PATH]\n"
+        "  cellar container create|list|show|remove NAME ...\n"
+        "  cellar device report           host device / capability report\n"
         "  cellar test                   run the compatibility test lab\n"
         "  cellar debug game.exe         debugger snapshot of a loaded PE\n"
         "  cellar --list-modules         list registered Win32 modules\n"
@@ -611,6 +1144,18 @@ int main(int argc, char **argv)
 
     if (strcmp(argv[1], "runtime") == 0)
         return cmd_runtime(argc, argv);
+
+    if (strcmp(argv[1], "app") == 0)
+        return cmd_app(argc, argv);
+
+    if (strcmp(argv[1], "profile") == 0)
+        return cmd_profile(argc, argv);
+
+    if (strcmp(argv[1], "container") == 0)
+        return cmd_container(argc, argv);
+
+    if (strcmp(argv[1], "device") == 0)
+        return cmd_device(argc, argv);
 
     if (strcmp(argv[1], "test") == 0)
         return cmd_test();

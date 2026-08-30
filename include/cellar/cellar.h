@@ -129,4 +129,7 @@ void cellar_path_join(char *dst, size_t n, const char *a, const char *b);
 /* Bounded copy; always NUL-terminates. */
 void cellar_strlcpy(char *dst, size_t n, const char *src);
 
+/* Bounded append; always NUL-terminates. */
+void cellar_strlcat(char *dst, size_t n, const char *src);
+
 #endif /* CELLAR_CELLAR_H */

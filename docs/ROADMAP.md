@@ -145,6 +145,35 @@ several Windows toolchains run unmodified.
 - ✅ **Devices + accessibility** — device registry; MSAA-shaped a11y tree
 - ⬜ **Milestone 1 (execution)** still the next *runtime* step — see below
 
+## Milestone 4.9 — Winaltor application workspace layer (current)
+
+> **Goal:** the product layer users interact with: one workspace per app, an
+> app library, and the reliability workflow (profiles, rollback, diagnosis).
+
+- ✅ **One workspace per app** — `cellar app add/list/show/remove`, a real
+  isolated prefix per application
+- ✅ **Guided setup** — `exe`, `msi` (metadata/journal), `import`, `portable`
+- ✅ **App library** — tags, favorites, size, runner, compatibility rating
+- ✅ **Versioned compatibility profiles** — YAML export/import, executable
+  hash, current profile, `profile list|show|apply|export|import`
+- ✅ **Config diff** — `cellar app diff NAME A B`
+- ✅ **One-click snapshot/rollback** — `cellar app snapshot/rollback`
+- ✅ **Repair mode** — `cellar app repair`
+- ✅ **Launch doctor** — `cellar app doctor`
+- ✅ **Readable logs / support bundle** — `cellar app diagnose`, `app support`
+- ✅ **Permissions / safety dashboard** — `app permissions`, `app safety`
+- ✅ **Per-app performance modes, controls, resolution, shader cache**
+- ✅ **Device capability report + container alias** — `device report`,
+  `container create`
+- ✅ **Community profile import/export** with trust categories
+- ✅ **Container/prefix manager upgrades** — `prefix create --arch win32|win64`
+  (architecture fixed at creation), `prefix clone`, `prefix export|import`,
+  generic `prefix set|settings` (runner, resolution, Box64 preset, CPU/frame
+  limits, ESync/FSync, DLL overrides), per-container runner
+- ✅ **Unit tests** — `test_workspace`
+- 🔶 MSI database parsing, real sandboxing, frame overlay, hardware governor,
+  touch-control editor, external-display presets, thermal protection
+
 ## Milestone 5 — Robustness & ecosystem
 
 - ⬜ Loader hardening (more fuzzing, corpus testing)

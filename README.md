@@ -87,9 +87,19 @@ cellar inspect program.exe       # Application Inspector (arch, DLLs, TLS, runti
 cellar analyze program.exe       # Application Compatibility Analysis
 cellar db list | db show APP     # compatibility database
 cellar prefix create Game        # isolated Windows environment (bottle)
+cellar prefix create Game --arch win32   # force a 32-bit container
+cellar prefix clone|import|export Game   # copy / archive a container
+cellar prefix set Game box64 performance # container-level settings
+cellar prefix settings Game
 cellar prefix launch Game game.exe
 cellar prefix backup|restore|delete Game
 cellar runtime list|install vcruntime|dotnet|directx|fonts|systemlibs
+cellar app add Game setup.exe --kind exe --launch game.exe
+cellar app list|show|remove|run|doctor|repair Game
+cellar app snapshot|rollback|diff|support|safety|shader Game ...
+cellar profile list|show|apply|export|import Game [label|path]
+cellar container create Game setup.exe --launch game.exe
+cellar device report             # device / capability report
 cellar test                      # compatibility test lab
 cellar debug program.exe         # debugger snapshot
 cellar program.exe               # load + report a Windows executable
@@ -253,11 +263,20 @@ Cellar ships a performance kit aimed at game-like Windows workloads:
 - **Dynamic tracing** — `--trace=...` categories, zero overhead when off.
 - **Crash diagnostics** — structured EXCEPTION capture on fatal signals.
 - **Plugins & backend selection** — Vulkan→OpenGL→Software / ALSA→PipeWire→WAV hot-selection, `.so` plugin loading.
-- **Testing** — 6 unit suites plus a deterministic loader fuzz harness (`make fuzz`) and `cellar test` (compatibility lab), all clean under ASan/UBSan.
+- **Testing** — 7 unit suites (loader, audio, perf, compat, kit, ecosystem, workspace) plus a deterministic loader fuzz harness (`make fuzz`) and `cellar test` (compatibility lab), all clean under ASan/UBSan.
 - **Inspector + compatibility DB** — `cellar inspect` / `cellar db`.
-- **Prefix manager** — create / backup / restore / delete isolated bottles.
+- **Prefix manager** — create (win32/win64) / clone / export / import /
+  backup / restore / delete isolated bottles, plus generic container-level
+  settings (runner, resolution, Box64 preset, CPU/frame limits, ESync/FSync).
 - **COM / OLE** — IUnknown, GUIDs, apartments, class registration.
 - **Shell / desktop / display / security / locale / print / devices / a11y.**
+- **Winaltor workspace layer** — one isolated environment per app, guided
+  setup (`exe`/`msi`/`import`/`portable`), an app library, versioned YAML
+  profiles tied to executable hashes, one-click snapshot/rollback, config
+  diff, repair mode, launch doctor, readable log diagnostics, sanitized
+  support bundles, permission dashboards, performance modes, controls,
+  shader-cache management, device capability report, and community profile
+  import/export. See [docs/WINALTOR.md](docs/WINALTOR.md).
 
 ## Layout
 
@@ -296,6 +315,7 @@ include/cellar/          public headers
   device.h               device registry
   debug.h                compatibility debugger snapshot
   testlab.h              compatibility test lab
+  workspace.h            Winaltor app workspaces, profiles, doctor, support
 src/
   loader/
     cellar_util.c        status strings, logging, endian reads, hashing
@@ -348,6 +368,7 @@ src/
   device/device.c        devices
   debug/debug.c          debugger snapshot
   testlab/testlab.c      compatibility test lab
+  workspace/workspace.c  Winaltor workspace/app/manager
   cli.c                  command-line driver
 tests/
   test_loader.c          loader unit tests (synthetic-PE driven)
@@ -356,6 +377,7 @@ tests/
   test_compat.c          analyzer + version profiles + app profiles + crash
   test_kit.c             timer, sync, shmem, trace, shadercache tests
   test_ecosystem.c       inspector, db, prefix, COM, test lab
+  test_workspace.c       Winaltor workspaces/profiles/doctor/support
 tools/
   gen_sample_pe.c        writes a minimal valid PE for testing
   fuzz_loader.c          deterministic PE-loader fuzz harness

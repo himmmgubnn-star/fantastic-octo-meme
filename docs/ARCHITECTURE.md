@@ -228,6 +228,27 @@ module's export table." Modules today: `KERNEL32`, `ntdll`, `USER32`,
 `ADVAPI32` (in-memory registry), `SHELL32`, `ole32`, `comdlg32`, `gdi32`,
 `ws2_32`, `version`, `WINMM`.
 
+## The Winaltor workspace layer — `src/workspace/workspace.c`
+
+This is the product surface on top of the compatibility ecosystem. Each app is
+one isolated *workspace* (a Cellar prefix) plus a small `app.conf` record and a
+`profiles/` directory. It owns:
+
+- **Setup / library** — `cellar_workspace_install()` creates the prefix,
+  inspects a source executable/installer, records architecture/graphics/audio/
+  runtime requirements, and writes a shortcut.
+- **Profiles** — `cellar_profile_point_t` is the YAML DTO. Profiles are stored
+  by label and always keep the executable hash; `profile_apply()` pushes a
+  profile into the workspace record and `profile_diff()` renders what changed.
+- **Snapshots** — a config snapshot copies `app.conf`, `prefix.conf`, and the
+  active profile into `snapshots/<label>/`; rollback restores those three.
+- **Doctor / support / diagnose** — `cellar_workspace_doctor()` produces a
+  structured pre-flight report; `support()` writes a sanitized bundle;
+  `diagnose()` classifies raw Wine/Box64 log lines into readable symptoms.
+- **Safety** — per-workspace permission bits and a plain-language dashboard
+  (`cellar_workspace_permissions_text()`), plus a malware-warning section in
+  the safety report.
+
 ## Conventions
 
 - **Public API lives in `include/cellar/`**; internal helpers are `static`.
@@ -246,3 +267,9 @@ AddressSanitizer + UndefinedBehaviorSanitizer.
 
 `tools/gen_sample_pe.c` writes the same synthetic PE to disk so the CLI can be
 demonstrated and inspected without MinGW.
+
+`tests/test_workspace.c` exercises the product layer in an isolated temp
+directory: guided setup, app-library records, profile save/load/diff,
+snapshot/rollback, launch doctor, support bundle, log diagnosis, permissions,
+perf/controls/resolution settings, shader-cache management, and the device
+capability report.
